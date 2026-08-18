@@ -1,0 +1,202 @@
+"""SDDL, and the two permission levels that get confused for one another.
+
+The round-trip is the property that matters: a descriptor that goes through
+this editor unchanged must come out unchanged. A parser that quietly drops an
+entry it does not understand is how permissions widen without anybody
+approving it.
+"""
+
+from __future__ import annotations
+
+import pytest
+
+from samfscon.core.errors import InvalidRequest
+from samfscon.srv import acl
+
+# A share root as Samba actually leaves one: administrators explicit, users
+# inheriting, and one deny that exists on purpose.
+REAL_SDDL = (
+    "O:BAG:BA"
+    "D:(A;OICI;FA;;;BA)"
+    "(A;OICIID;0x001200a9;;;BU)"
+    "(D;OICI;FW;;;S-1-5-21-1-2-3-1013)"
+)
+
+
+# ---------------------------------------------------------------------------
+# Parsing
+# ---------------------------------------------------------------------------
+
+
+def test_owner_and_group_are_read() -> None:
+    parsed = acl.parse(REAL_SDDL)
+    assert parsed.owner == "BA"
+    assert parsed.group == "BA"
+
+
+def test_every_ace_survives_parsing() -> None:
+    """An entry lost here is a permission nobody notices going missing."""
+    parsed = acl.parse(REAL_SDDL)
+    assert [entry.trustee for entry in parsed.aces] == ["BA", "BU", "S-1-5-21-1-2-3-1013"]
+
+
+def test_deny_entries_keep_their_kind() -> None:
+    """Getting this backwards turns a prohibition into a grant."""
+    parsed = acl.parse(REAL_SDDL)
+    kinds = {entry.trustee: entry.kind for entry in parsed.aces}
+    assert kinds["BA"] == "allow"
+    assert kinds["S-1-5-21-1-2-3-1013"] == "deny"
+
+
+def test_an_inherited_entry_is_marked_as_such() -> None:
+    """Inherited entries are not editable in place: they belong to the parent."""
+    parsed = acl.parse(REAL_SDDL)
+    by_trustee = {entry.trustee: entry for entry in parsed.aces}
+    assert by_trustee["BU"].inherited is True
+    assert by_trustee["BA"].inherited is False
+
+
+def test_a_hexadecimal_mask_is_read_exactly() -> None:
+    """Samba writes one whenever the letters cannot express the mask."""
+    parsed = acl.parse("D:(A;;0x001200a9;;;BU)")
+    assert parsed.aces[0].mask == 0x001200A9
+
+
+def test_a_descriptor_without_a_dacl_is_refused() -> None:
+    """One that grants nothing to anybody is not something to edit silently."""
+    with pytest.raises(InvalidRequest) as caught:
+        acl.parse("O:BAG:BA")
+    assert caught.value.code == "no_dacl"
+
+
+def test_a_malformed_ace_is_skipped_rather_than_crashing() -> None:
+    """One unreadable entry must not cost the administrator the whole dialog."""
+    parsed = acl.parse("D:(A;;FA;;;BA)(nonsense)(A;;FR;;;BU)")
+    assert [entry.trustee for entry in parsed.aces] == ["BA", "BU"]
+
+
+# ---------------------------------------------------------------------------
+# Rendering
+# ---------------------------------------------------------------------------
+
+
+def test_a_descriptor_round_trips() -> None:
+    """Parse, build, parse: the entries that are ours must come back identical."""
+    once = acl.parse(REAL_SDDL)
+    twice = acl.parse(acl.build(once))
+
+    ours = [entry for entry in once.aces if not entry.inherited]
+    assert len(twice.aces) == len(ours)
+    for before, after in zip(ours, twice.aces, strict=True):
+        assert (before.trustee, before.kind, before.mask, before.flags) == (
+            after.trustee,
+            after.kind,
+            after.mask,
+            after.flags,
+        )
+
+
+def test_inherited_entries_are_not_written_back() -> None:
+    """Writing them back freezes a copy that stops tracking the parent."""
+    built = acl.build(acl.parse(REAL_SDDL))
+    assert "BU" not in built
+    assert "BA" in built
+
+
+def test_the_inherited_flag_is_never_written() -> None:
+    """It is the server's statement about origin, not ours to claim."""
+    descriptor = acl.parse("D:(A;OICI;FA;;;BA)")
+    descriptor.aces[0].flags |= acl.INHERITED_ACE
+    assert "ID" not in acl.render_flags(descriptor.aces[0].flags)
+
+
+def test_an_exact_mask_renders_as_its_letters() -> None:
+    assert acl.render_rights(acl.FILE_ALL_ACCESS) == "FA"
+    assert acl.render_rights(acl.FILE_GENERIC_READ) == "FR"
+
+
+def test_an_inexact_mask_renders_as_hexadecimal() -> None:
+    """Rounding it to the nearest named combination would change the permission."""
+    assert acl.render_rights(0x001200A9) == "0x001200a9"
+
+
+def test_a_protected_dacl_survives_the_round_trip() -> None:
+    """Protection is what stops the parent's entries flowing in."""
+    assert acl.parse("D:P(A;;FA;;;BA)").protected is True
+    assert acl.build(acl.parse("D:P(A;;FA;;;BA)")).startswith("D:P")
+
+
+# ---------------------------------------------------------------------------
+# What a mask means
+# ---------------------------------------------------------------------------
+
+
+def test_generic_bits_expand_to_the_same_rights_as_the_specific_ones() -> None:
+    """GR and FR mean the same to the server; the editor must agree."""
+    assert acl.rights_of(acl.GENERIC_READ) == acl.rights_of(acl.FILE_GENERIC_READ)
+
+
+def test_full_control_includes_taking_ownership() -> None:
+    rights = acl.rights_of(acl.preset_mask("full"))
+    assert "take_ownership" in rights
+    assert "change_permissions" in rights
+
+
+def test_read_does_not_include_write() -> None:
+    assert "write" not in acl.rights_of(acl.preset_mask("read"))
+
+
+def test_an_unknown_preset_is_refused_with_the_list() -> None:
+    with pytest.raises(InvalidRequest) as caught:
+        acl.preset_mask("almost-full")
+    assert "full" in caught.value.context["allowed"]
+
+
+@pytest.mark.parametrize(
+    ("flags", "expected"),
+    [
+        (0, "this_only"),
+        (acl.OBJECT_INHERIT | acl.CONTAINER_INHERIT, "this_and_children"),
+        (acl.OBJECT_INHERIT | acl.CONTAINER_INHERIT | acl.INHERIT_ONLY, "children_only"),
+        (acl.CONTAINER_INHERIT, "folders"),
+        (acl.OBJECT_INHERIT, "files"),
+    ],
+)
+def test_inheritance_is_described_the_way_the_dialogs_word_it(flags: int, expected: str) -> None:
+    assert acl._applies_to(flags) == expected
+
+
+# ---------------------------------------------------------------------------
+# The intersection — the number neither descriptor gives on its own
+# ---------------------------------------------------------------------------
+
+
+def test_the_share_permission_bounds_the_file_permission() -> None:
+    """A read-only share makes a writable file ACL irrelevant.
+
+    This is the case that produces the screenshot saying Full Control next to a
+    client saying access denied.
+    """
+    result = acl.effective_access(acl.FILE_GENERIC_READ, acl.FILE_ALL_ACCESS)
+    assert "write" not in result["rights"]
+    assert result["limited_by_share"] is True
+
+
+def test_the_file_permission_bounds_the_share_permission() -> None:
+    """The usual Samba arrangement: share wide open, files doing the work."""
+    result = acl.effective_access(acl.FILE_ALL_ACCESS, acl.FILE_GENERIC_READ)
+    assert "write" not in result["rights"]
+    assert result["limited_by_share"] is False
+
+
+def test_both_permitting_means_permitted() -> None:
+    result = acl.effective_access(acl.FILE_ALL_ACCESS, acl.FILE_ALL_ACCESS)
+    assert "write" in result["rights"]
+    assert result["limited_by_share"] is False
+
+
+def test_generic_and_specific_masks_intersect_correctly() -> None:
+    """A share written with GA and a file written with FA are the same ceiling."""
+    generic = acl.effective_access(acl.GENERIC_ALL, acl.FILE_GENERIC_WRITE)
+    specific = acl.effective_access(acl.FILE_ALL_ACCESS, acl.FILE_GENERIC_WRITE)
+    assert generic["rights"] == specific["rights"]

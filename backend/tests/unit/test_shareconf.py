@@ -1,0 +1,182 @@
+"""The share option catalogue, and the values it refuses.
+
+Validation lives on this side of the wire for a reason worth restating: Samba
+accepts a great many nonsense values without complaint and then behaves oddly.
+``create mask = 999`` is not an error to the smb.conf parser and is not what
+anyone meant. The refusal is only useful where it can name the option and say
+what was wrong with it.
+"""
+
+from __future__ import annotations
+
+import pytest
+
+from samfscon.core.errors import InvalidRequest
+from samfscon.srv import shareconf
+
+# ---------------------------------------------------------------------------
+# The catalogue itself
+# ---------------------------------------------------------------------------
+
+
+def test_every_option_has_a_sentence_saying_what_it_does() -> None:
+    """A form field with no explanation is a field people leave alone."""
+    for option in shareconf.CATALOGUE:
+        assert option.doc, f"{option.name} has no English description"
+        assert option.doc_de, f"{option.name} has no German description"
+
+
+def test_no_option_duplicates_what_srvsvc_already_owns() -> None:
+    """Two places to set one value is two places to disagree."""
+    names = {option.name for option in shareconf.CATALOGUE}
+    assert not (names & shareconf.SRVSVC_OWNED)
+
+
+def test_choice_options_declare_their_choices() -> None:
+    for option in shareconf.CATALOGUE:
+        if option.type == shareconf.TYPE_CHOICE:
+            assert option.choices, f"{option.name} is a choice with no choices"
+            if option.default is not None:
+                assert option.default in option.choices
+
+
+def test_the_catalogue_is_translated_on_request() -> None:
+    english = {item["name"]: item["doc"] for item in shareconf.describe_catalogue("en")}
+    german = {item["name"]: item["doc"] for item in shareconf.describe_catalogue("de")}
+    assert english["read only"] != german["read only"]
+    assert german["read only"].startswith("Ob die Freigabe")
+
+
+# ---------------------------------------------------------------------------
+# Booleans
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("value", ["yes", "YES", "true", "1", "on", " yes "])
+def test_truthy_spellings_normalise_to_yes(value: str) -> None:
+    """People type all of these; smb.conf should end up with one of them."""
+    assert shareconf.validate({"read only": value}) == {"read only": "yes"}
+
+
+@pytest.mark.parametrize("value", ["no", "FALSE", "0", "off"])
+def test_falsy_spellings_normalise_to_no(value: str) -> None:
+    assert shareconf.validate({"read only": value}) == {"read only": "no"}
+
+
+def test_a_boolean_that_is_neither_is_refused() -> None:
+    with pytest.raises(InvalidRequest) as caught:
+        shareconf.validate({"read only": "maybe"})
+    assert caught.value.code == "invalid_option_value"
+    assert caught.value.context["option"] == "read only"
+
+
+# ---------------------------------------------------------------------------
+# Permission masks
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(("given", "stored"), [("0750", "0750"), ("750", "0750"), ("0644", "0644")])
+def test_masks_are_normalised_to_four_octal_digits(given: str, stored: str) -> None:
+    assert shareconf.validate({"create mask": given}) == {"create mask": stored}
+
+
+@pytest.mark.parametrize("value", ["999", "0888", "rwxr-x---", "0o750", ""])
+def test_a_mask_that_is_not_octal_is_refused(value: str) -> None:
+    """The value Samba would accept and then not do what was meant."""
+    with pytest.raises(InvalidRequest):
+        shareconf.validate({"create mask": value})
+
+
+# ---------------------------------------------------------------------------
+# Lists, numbers and choices
+# ---------------------------------------------------------------------------
+
+
+def test_lists_are_normalised_to_the_separator_samba_writes() -> None:
+    """So a value written here reads the same as one `net conf` shows."""
+    result = shareconf.validate({"valid users": "alice, @staff,  bob"})
+    assert result == {"valid users": "alice @staff bob"}
+
+
+def test_vfs_objects_keeps_its_order() -> None:
+    """Order is meaning here: each module sees what the previous passed on."""
+    result = shareconf.validate({"vfs objects": "full_audit recycle shadow_copy2"})
+    assert result == {"vfs objects": "full_audit recycle shadow_copy2"}
+
+
+def test_numbers_are_checked() -> None:
+    assert shareconf.validate({"max connections": " 12 "}) == {"max connections": "12"}
+    with pytest.raises(InvalidRequest):
+        shareconf.validate({"max connections": "twelve"})
+    with pytest.raises(InvalidRequest):
+        shareconf.validate({"max connections": "-1"})
+
+
+def test_choices_are_checked_and_listed_in_the_refusal() -> None:
+    assert shareconf.validate({"shadow:sort": "ASC"}) == {"shadow:sort": "asc"}
+    with pytest.raises(InvalidRequest) as caught:
+        shareconf.validate({"shadow:sort": "sideways"})
+    assert caught.value.context["allowed"] == ["asc", "desc"]
+
+
+# ---------------------------------------------------------------------------
+# The edges that matter
+# ---------------------------------------------------------------------------
+
+
+def test_option_names_are_normalised_the_way_samba_spells_them() -> None:
+    """`vfs_objects` and `vfs objects` are one option, and people type both."""
+    assert shareconf.validate({"VFS_Objects": "recycle"}) == {"vfs objects": "recycle"}
+
+
+def test_none_deletes_rather_than_setting_an_empty_value() -> None:
+    """Different things: one restores the server's default, one sets a value.
+
+    An empty string is a value the smb.conf parser will honour, so conflating
+    the two would silently change behaviour on every "clear this field".
+    """
+    assert shareconf.validate({"create mask": None}) == {"create mask": None}
+    assert shareconf.validate({"veto files": ""}) == {"veto files": ""}
+
+
+def test_srvsvc_owned_options_are_refused_with_a_reason() -> None:
+    """The path is set through the share itself; two routes would disagree."""
+    with pytest.raises(InvalidRequest) as caught:
+        shareconf.validate({"path": "/srv/elsewhere"})
+    assert caught.value.code == "option_not_editable"
+
+
+def test_uncatalogued_options_pass_through_unchanged() -> None:
+    """A server configured by hand is not wrong, and must survive an edit here.
+
+    Refusing what the catalogue does not describe would make SAMFSCON unable to
+    preserve a configuration it did not write — which is a worse failure than
+    not validating it.
+    """
+    result = shareconf.validate({"some future option": "  a value  "})
+    assert result == {"some future option": "a value"}
+
+
+def test_split_separates_the_known_from_the_rest() -> None:
+    stored = {
+        "read only": "no",
+        "vfs objects": "recycle",
+        "an option we do not describe": "42",
+        "path": "/srv/shares/x",
+    }
+    options = shareconf.split(stored)
+
+    assert options.known == {"read only": "no", "vfs objects": "recycle"}
+    assert options.extra == {"an option we do not describe": "42"}
+    # srvsvc reports the path; showing it a second time invites disagreement.
+    assert "path" not in options.known
+    assert "path" not in options.extra
+
+
+def test_vfs_modules_are_read_in_order() -> None:
+    """The interface greys out recycle:* until the module is actually loaded."""
+    assert shareconf.vfs_modules({"vfs objects": "recycle, shadow_copy2"}) == [
+        "recycle",
+        "shadow_copy2",
+    ]
+    assert shareconf.vfs_modules({}) == []

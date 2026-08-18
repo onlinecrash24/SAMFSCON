@@ -1,0 +1,21 @@
+[
+  {
+    "id": "fs1",
+    "label": "File server, main office",
+    "host": "fs1.example.lan",
+    "mode": "ad_member",
+    "realm": "EXAMPLE.LAN"
+  },
+  {
+    "id": "nas",
+    "label": "Backup NAS (standalone)",
+    "host": "192.168.1.50",
+    "mode": "standalone",
+    "workgroup": "WORKGROUP"
+  },
+  {
+    "id": "fs2",
+    "label": "File server, branch office",
+    "host": "fs2.example.lan"
+  }
+]

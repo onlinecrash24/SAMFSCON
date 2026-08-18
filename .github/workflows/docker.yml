@@ -1,0 +1,140 @@
+# Build SAMFSCON and publish the image to the GitHub container registry.
+#
+# The tests run first and the image is only published if they pass. Publishing
+# an image that fails its own suite is the failure this ordering prevents —
+# and the unit tests are the half that needs no file server, so they run
+# anywhere.
+#
+# The integration tests are deliberately not here. They create and delete
+# shares and local accounts on a real server; a runner has none, and pointing
+# one at a real file server from CI is not something to arrange by accident.
+
+name: Docker
+
+# Two builds per release, not three. A version reaches main and is tagged in
+# the same breath, so a `main` trigger beside the tag one built the same
+# commit twice — and the two builds produced different digests, leaving
+# `latest` and the version tag pointing at images that were identical in
+# content and not the same object. Releasing means tagging; the tag build
+# carries `latest`, because metadata-action counts a tag as the default branch.
+on:
+  push:
+    branches: [DEV]
+    tags: ["v*"]
+  pull_request:
+    branches: [DEV, main]
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  test:
+    name: Lint and unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # The runner's default docker driver cannot export a build cache. The
+      # container driver can, and still loads the built image into the local
+      # store so the next step can run it.
+      - uses: docker/setup-buildx-action@v3
+
+      # The `test` stage of the Dockerfile is the runtime image plus pytest and
+      # the suite, so the tests run against exactly what ships rather than
+      # against a separately installed set of dependencies.
+      - name: Build the test image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile
+          target: test
+          load: true
+          tags: samfscon:test
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # --entrypoint skips the container's start-up — certificate generation,
+      # nginx templating, krb5.conf — none of which a test run needs.
+      - name: Unit tests
+        run: docker run --rm --entrypoint python samfscon:test -m pytest tests/unit -q
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # Ruff needs none of the Samba bindings, so it runs here rather than in
+      # the image — seconds instead of a container build.
+      - name: Install ruff
+        run: pip install "ruff>=0.5"
+
+      - name: Check
+        working-directory: backend
+        run: ruff check samfscon tests
+
+  publish:
+    name: Publish to ghcr.io
+    runs-on: ubuntu-latest
+    needs: [test, lint]
+    # Nothing is published from a pull request: the token has no write access
+    # there, and an image built from unreviewed code should not carry a tag
+    # anyone might pull.
+    if: github.event_name != 'pull_request'
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # The runner's default docker driver cannot export a build cache. The
+      # container driver can, and still loads the built image into the local
+      # store so the next step can run it.
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Log in to the registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Work out the tags
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          # `main` carries the releases, `DEV` carries the work in progress.
+          #
+          # The branch name is not used as a tag directly: it would publish
+          # `DEV` in capitals, and an image tag people type by hand should not
+          # depend on how a branch happens to be spelled. `dev` is set
+          # explicitly instead, and `latest` follows the default branch, which
+          # is `main`.
+          tags: |
+            type=raw,value=dev,enable=${{ github.ref == 'refs/heads/DEV' }}
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,format=short
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile
+          # The product, not the test image: pytest and the suite have no place
+          # in something people deploy.
+          target: runtime
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

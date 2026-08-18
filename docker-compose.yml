@@ -1,0 +1,177 @@
+# SAMFSCON — the one compose file.
+#
+#   docker compose up -d --build
+#
+# **No .env is needed.** Every setting lives below, with the value it should
+# have. Change it here and rebuild; there is no second file to keep in step and
+# nothing that silently falls back to an empty string because a variable was
+# not exported.
+#
+# Where a `${VAR:-default}` still appears it is because the value belongs to the
+# machine rather than to the project — a password, a port that is already taken.
+# Compose reads those from the shell:
+#
+#   TEST_ADMIN_PASSWORD=… docker compose up -d --build
+#
+# or from a `docker-compose.override.yml`, which is in .gitignore. **Never write
+# a password into this file** — it is in version control.
+#
+# The published ports are 8444/8081 rather than 8443/8080 so SAMFSCON and
+# SAMADCON can run on the same host without arguing over them.
+#
+# The build target decides what is in the image. `runtime` is the product;
+# `test` adds pytest and the test suite, which is what the integration tests
+# need:
+#
+#   SAMFSCON_TARGET=test docker compose up -d --build
+#   docker compose exec samfscon python -m pytest tests/integration -q
+#
+# Tests are copied into the image rather than mounted, so a changed test file
+# needs `up -d --build` before `exec`.
+#
+# WARNING: the integration tests create and delete shares and local accounts.
+# Point them at a throwaway file server, never at production.
+
+services:
+  samfscon:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+      target: ${SAMFSCON_TARGET:-runtime}
+    # Tagged by target so a test image never overwrites a runtime one.
+    image: samfscon:${SAMFSCON_TARGET:-runtime}
+    container_name: samfscon
+    restart: unless-stopped
+
+    environment:
+      # --- The file server -----------------------------------------------
+      # All of these may stay empty: the sign-in form then asks for an address
+      # and works the rest out from the server itself. When SAMFSCON_SERVER_HOST
+      # is set for a domain member, use a name that resolves — Kerberos issues
+      # tickets for cifs/<hostname> and a bare IP has no such principal.
+      SAMFSCON_SERVER_HOST: ""
+      # auto asks the server what it is. ad_member or standalone force it, for
+      # a server that refuses unauthenticated queries.
+      SAMFSCON_SERVER_MODE: "auto"
+      # Only for a domain member, and only when it cannot be discovered.
+      SAMFSCON_REALM: ""
+      SAMFSCON_WORKGROUP: ""
+      # The realm's domain controllers, comma-separated. Empty means DNS SRV.
+      # These are the KDCs — not the file server, which is never one.
+      SAMFSCON_KDC_HOSTS: ""
+
+      # --- Pre-configured servers (optional) ------------------------------
+      # A JSON file listing servers to offer in the sign-in form; see
+      # docker/servers/servers.example.json.
+      SAMFSCON_SERVERS_FILE: ""
+      # 0 allows only the configured servers — administrators can then no
+      # longer type an arbitrary address.
+      SAMFSCON_ALLOW_CUSTOM_SERVERS: "1"
+      # A standalone server has no Kerberos, so its sessions hold the password
+      # in memory for as long as they last. 0 refuses that trade outright and
+      # allows only domain members.
+      SAMFSCON_ALLOW_STANDALONE: "1"
+
+      # --- SMB ------------------------------------------------------------
+      # The floor, not a preference. Signing is always required; this is the
+      # lowest dialect SAMFSCON will speak, and SMB1 is not on the list.
+      SAMFSCON_SMB_MIN_PROTOCOL: "SMB3"
+      # Require SMB3 encryption on top of signing. Off by default because a
+      # server that cannot do it then refuses every connection — turn it on
+      # once you know the server offers it.
+      SAMFSCON_SMB_ENCRYPT: "0"
+
+      # --- Web front end ---------------------------------------------------
+      # The name the console is reached under. It becomes the CN and the SAN of
+      # the self-signed certificate and the target of the HTTP-to-HTTPS
+      # redirect, so a wrong value here is a certificate warning for everyone.
+      SAMFSCON_PUBLIC_HOST: "samfscon.example.lan"
+      # Must name the port the host publishes, not the one nginx listens on.
+      SAMFSCON_PUBLIC_HTTPS_PORT: "${SAMFSCON_HTTPS_PORT:-8444}"
+
+      # --- Sessions --------------------------------------------------------
+      SAMFSCON_TICKET_LIFETIME: "10h"
+      SAMFSCON_RENEW_LIFETIME: "7d"
+      SAMFSCON_SESSION_IDLE_MINUTES: "60"
+      # Failed sign-ins per account before SAMFSCON stops forwarding attempts to
+      # the server. Protects against triggering account lockout through the web
+      # form.
+      SAMFSCON_LOGIN_MAX_ATTEMPTS: "5"
+      SAMFSCON_LOGIN_LOCKOUT_MINUTES: "5"
+
+      # --- Logging ---------------------------------------------------------
+      SAMFSCON_LOG_LEVEL: "INFO"
+      # Every write operation lands here: who, what, share, option diff.
+      SAMFSCON_AUDIT_FILE: "/var/log/samfscon/audit.jsonl"
+      # Raise for Samba protocol traces. Noisy — 0 outside a hunt.
+      SAMFSCON_SAMBA_LOG_LEVEL: "0"
+      # Extra diagnostics and a more talkative error surface.
+      SAMFSCON_DEV_MODE: "0"
+
+      # --- Integration tests -----------------------------------------------
+      # Only read when the image is built with SAMFSCON_TARGET=test. They come
+      # from the shell rather than from here because one of them is an
+      # administrator's password:
+      #
+      #   TEST_FS_HOST=fs1.example.lan TEST_ADMIN_PASSWORD=… \
+      #     docker compose exec samfscon python -m pytest tests/integration -q
+      #
+      # Without TEST_FS_HOST and TEST_ADMIN_PASSWORD the tests skip themselves.
+      TEST_FS_HOST: "${TEST_FS_HOST:-}"
+      TEST_FS_MODE: "${TEST_FS_MODE:-}"
+      TEST_REALM: "${TEST_REALM:-}"
+      TEST_ADMIN_USER: "${TEST_ADMIN_USER:-Administrator}"
+      TEST_ADMIN_PASSWORD: "${TEST_ADMIN_PASSWORD:-}"
+      # An existing directory on the test server that shares may point at. The
+      # tests cannot create one — that is the limit of managing a server over
+      # the network, and it applies to them too.
+      TEST_SHARE_PATH: "${TEST_SHARE_PATH:-/srv/samfscon-test}"
+
+    ports:
+      - "${SAMFSCON_HTTPS_PORT:-8444}:8443"
+      - "${SAMFSCON_HTTP_PORT:-8081}:8080"
+
+    # SAMFSCON talks to file servers over the network. For a domain member it
+    # also needs to reach the realm's KDCs, and Kerberos needs the file
+    # server's own FQDN to resolve. Where DNS does not provide it:
+    #
+    #   dns: ["192.168.1.10"]
+    #   dns_search: ["example.lan"]
+    #   extra_hosts: ["fs1.example.lan:192.168.1.20"]
+
+    volumes:
+      # Mount a real certificate here for production; otherwise the entrypoint
+      # generates a self-signed one on first start. The container runs as uid
+      # 1000 and a bind mount belongs to root, so this directory has to be
+      # writable for it — see the README.
+      - ./docker/tls:/etc/samfscon/tls
+      # Optional: pre-configured servers (see servers.example.json).
+      - ./docker/servers:/etc/samfscon/servers:ro
+      - samfscon-cache:/var/cache/samfscon
+      - samfscon-data:/var/lib/samfscon
+      # The audit trail should outlive the container.
+      - samfscon-logs:/var/log/samfscon
+
+    # Kerberos credential caches live in /dev/shm and must never hit a disk.
+    shm_size: 64m
+    tmpfs:
+      # uid/gid are required: a tmpfs mount belongs to root by default, and
+      # nginx and supervisor run as uid 1000 and write their pid and socket
+      # files here.
+      - /run/samfscon:mode=0700,uid=1000,gid=1000,size=8m
+
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+volumes:
+  samfscon-cache:
+  samfscon-data:
+  samfscon-logs:
