@@ -117,11 +117,42 @@ def capabilities(conn: ServerConnection, *, sid: str | None = None) -> Capabilit
     Neither check changes anything, and neither is allowed to fail the caller:
     an administrator whose account cannot read the privilege list should still
     get a console, with the parts that need it explained rather than broken.
+
+    ``sid`` is optional and is looked up when it is not given. It used not to
+    be — every caller but one passed nothing, and the privilege check then
+    reported the signed-in account's SID as unknown. Which was true, and
+    thoroughly misleading: nobody had asked. The banner said so for four rounds
+    of testing while the lookup that would have answered it sat on a path only
+    `samfsconctl check` ever took.
     """
     caps = Capabilities()
     _check_registry(conn, caps)
-    _check_privilege(conn, caps, sid)
+    _check_privilege(conn, caps, sid if sid is not None else _own_sid(conn))
     return caps
+
+
+def _own_sid(conn: ServerConnection) -> str | None:
+    """The signed-in account's SID, resolved once per connection.
+
+    Cached because it cannot change while the session lasts: it is the identity
+    the connection was opened with. The privilege check runs on every share
+    write as well as on every listing, and three LSA round trips per click is a
+    cost with nothing to show for it.
+    """
+    cached = getattr(conn, "_own_sid", "unset")
+    if cached != "unset":
+        return cached
+
+    from samfscon.srv import identity
+
+    try:
+        sid = identity.current_account(conn).get("sid")
+    except Exception:  # a probe must not break the console
+        logger.debug("the signed-in account could not be resolved", exc_info=True)
+        sid = None
+
+    conn._own_sid = sid  # the cache belongs to the connection
+    return sid
 
 
 def _check_registry(conn: ServerConnection, caps: Capabilities) -> None:

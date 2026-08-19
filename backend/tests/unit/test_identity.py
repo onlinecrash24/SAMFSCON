@@ -178,3 +178,82 @@ def test_no_spelling_is_offered_twice() -> None:
 def test_a_standalone_server_still_gets_its_bare_name() -> None:
     """No realm, no workgroup, nothing to qualify with — and that is fine."""
     assert identity._own_name_candidates(_Conn(), "admin", None) == ["admin"]
+
+
+# ---------------------------------------------------------------------------
+# The capability check has to look the account up itself
+# ---------------------------------------------------------------------------
+
+
+class _CapConn:
+    """Enough of a connection for the capability probes to run against."""
+
+    def __init__(self, sid: str | None) -> None:
+        self._sid = sid
+        self.lookups = 0
+        self.target = _Target("EXAMPLE.LAN", None)
+
+
+def test_the_capability_check_resolves_the_account_when_nobody_passes_one(
+    monkeypatch,
+) -> None:
+    """The banner's actual cause.
+
+    Every caller but one passed no SID, and the privilege check then reported it
+    as unknown — true, and thoroughly misleading, because nobody had asked. The
+    lookup that would have answered it sat on a path only `samfsconctl check`
+    ever took.
+    """
+    from samfscon.srv import diagnostics, identity
+
+    conn = _CapConn("S-1-5-21-1-2-3-500")
+
+    def _account(c):
+        c.lookups += 1
+        return {"sid": c._sid}
+
+    monkeypatch.setattr(identity, "current_account", _account)
+    assert diagnostics._own_sid(conn) == "S-1-5-21-1-2-3-500"
+    assert conn.lookups == 1
+
+
+def test_the_account_is_resolved_once_per_connection(monkeypatch) -> None:
+    """It is the identity the connection was opened with; it cannot change.
+
+    The privilege check runs on every share write as well as every listing, and
+    three LSA round trips per click buys nothing.
+    """
+    from samfscon.srv import diagnostics, identity
+
+    conn = _CapConn("S-1-5-21-1-2-3-500")
+    monkeypatch.setattr(
+        identity, "current_account", lambda c: (setattr(c, "lookups", c.lookups + 1), {"sid": c._sid})[1]
+    )
+
+    for _ in range(4):
+        diagnostics._own_sid(conn)
+    assert conn.lookups == 1
+
+
+def test_an_unresolvable_account_is_cached_as_unresolved(monkeypatch) -> None:
+    """None is an answer too, and asking again four times will not change it."""
+    from samfscon.srv import diagnostics, identity
+
+    conn = _CapConn(None)
+    monkeypatch.setattr(
+        identity, "current_account", lambda c: (setattr(c, "lookups", c.lookups + 1), {"sid": None})[1]
+    )
+
+    assert diagnostics._own_sid(conn) is None
+    assert diagnostics._own_sid(conn) is None
+    assert conn.lookups == 1
+
+
+def test_a_failing_lookup_does_not_break_the_console(monkeypatch) -> None:
+    from samfscon.srv import diagnostics, identity
+
+    def _boom(_conn):
+        raise RuntimeError("the server hung up")
+
+    monkeypatch.setattr(identity, "current_account", _boom)
+    assert diagnostics._own_sid(_CapConn(None)) is None
