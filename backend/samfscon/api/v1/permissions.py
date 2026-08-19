@@ -214,11 +214,6 @@ def _resolve_trustees(
             trustees[entry.trustee] = {"sid": None, "name": None, "alias": entry.trustee}
             continue
 
-        unix = acl.unix_identity(sid)
-        if unix is not None:
-            trustees[entry.trustee] = {"sid": sid, "name": None, "unix": unix}
-            continue
-
         to_look_up[sid] = entry.trustee
 
     if to_look_up:
@@ -232,7 +227,17 @@ def _resolve_trustees(
             pass
 
     for sid, trustee in to_look_up.items():
-        trustees.setdefault(trustee, {"sid": sid, "name": None, "resolved": False})
+        # Only now. `smbcacls` renders S-1-22-2-0 as "Unix Group\\root", which
+        # means the server resolves Samba's Unix mappings perfectly well through
+        # winbind — so asking it first and naming them ourselves second gets the
+        # server's own name where there is one, and a usable one where there is
+        # not. The other way round, this console would have insisted on "Unix
+        # group 0" for something the server calls root.
+        unix = acl.unix_identity(sid)
+        if unix is not None:
+            trustees.setdefault(trustee, {"sid": sid, "name": None, "unix": unix})
+        else:
+            trustees.setdefault(trustee, {"sid": sid, "name": None, "resolved": False})
 
     return trustees
 

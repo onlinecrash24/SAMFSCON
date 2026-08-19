@@ -259,3 +259,68 @@ def test_an_unreadable_entry_is_written_back_exactly_as_it_arrived() -> None:
     built = acl.build(descriptor)
     assert "FRZZ" in built  # untouched
     assert "FA" in built  # re-rendered from the mask, as normal
+
+
+# ---------------------------------------------------------------------------
+# The share root of a real Samba AD member
+#
+# Cross-checked against what `smbcacls //server/share /` printed for the same
+# descriptor, which is the only reason the empty masks below are known to be
+# real rather than a parsing fault:
+#
+#   ACL:SPAM-DENY\administrator:ALLOWED/OI|CI/FULL
+#   ACL:Unix Group\root:ALLOWED/OI|CI/          <- rights column empty
+#   ACL:Everyone:ALLOWED/OI|CI/                 <- rights column empty
+#   ACL:SPAM-DENY\Domain Users:ALLOWED/0x0/     <- flags 0, rights empty
+# ---------------------------------------------------------------------------
+
+LIVE_SDDL = (
+    "O:S-1-5-21-1067335908-1822738269-3252190750-500"
+    "G:S-1-5-21-1067335908-1822738269-3252190750-513"
+    "D:PAI(A;OICI;FA;;;S-1-5-21-1067335908-1822738269-3252190750-500)"
+    "(A;OICI;;;;S-1-22-2-0)"
+    "(A;OICI;;;;WD)"
+    "(A;;;;;S-1-5-21-1067335908-1822738269-3252190750-513)"
+)
+
+
+def test_an_empty_rights_field_is_a_mask_of_zero_and_not_a_parse_failure() -> None:
+    """The entry grants nothing, and that is what the descriptor says.
+
+    Samba builds the NT ACL out of the POSIX one, and a POSIX entry with no
+    permission bits becomes an ACE with an empty access mask. Reading that as
+    "the parser could not cope" sends somebody hunting for a bug in the wrong
+    place — which is exactly where it sent me.
+    """
+    descriptor = acl.parse(LIVE_SDDL)
+    empty = [entry for entry in descriptor.aces if entry.mask == 0]
+
+    assert len(empty) == 3
+    for entry in empty:
+        assert entry.understood is True  # read correctly, and it says zero
+        assert entry.raw_rights == ""
+
+
+def test_the_owner_and_group_of_a_real_descriptor_are_separate_sids() -> None:
+    """Two full SIDs run together with no separator between them."""
+    descriptor = acl.parse(LIVE_SDDL)
+    assert descriptor.owner == "S-1-5-21-1067335908-1822738269-3252190750-500"
+    assert descriptor.group == "S-1-5-21-1067335908-1822738269-3252190750-513"
+
+
+def test_a_protected_dacl_is_recognised_through_its_other_flags() -> None:
+    """`D:PAI` — protected and auto-inherited, which is what smbcacls calls DP."""
+    assert acl.parse(LIVE_SDDL).protected is True
+
+
+def test_an_entry_that_grants_nothing_survives_the_round_trip() -> None:
+    """It is in the descriptor, so it stays in the descriptor.
+
+    Dropping an ACE because it grants nothing would be an editor quietly
+    rewriting a permission set it was opened only to look at.
+    """
+    once = acl.parse(LIVE_SDDL)
+    twice = acl.parse(acl.build(once))
+
+    assert len(twice.aces) == len(once.aces)
+    assert [entry.mask for entry in twice.aces] == [entry.mask for entry in once.aces]

@@ -234,6 +234,11 @@ export const de = {
   'perm.raw': 'Sicherheitsdeskriptor (SDDL)',
   'perm.unixUser': 'Unix-Benutzer {id}',
   'perm.unixGroup': 'Unix-Gruppe {id}',
+  'perm.owner': 'Besitzer',
+  'perm.group': 'Gruppe',
+  'perm.grantsNothing': 'gewährt nichts',
+  'perm.grantsNothing.why':
+    'Einträge, die nichts gewähren, sind kein Fehler: Samba baut die NT-ACL aus der POSIX-ACL, und ein POSIX-Eintrag ohne Rechtebits wird zu einem ACE mit leerer Zugriffsmaske. Er steht in der Liste, weil er im Deskriptor steht.',
   'perm.trustee': 'Konto',
   'perm.kind': 'Art',
   'perm.kind.allow': 'Erlauben',
@@ -681,6 +686,11 @@ export const en: Record<MessageKey, string> = {
   'perm.raw': 'Security descriptor (SDDL)',
   'perm.unixUser': 'Unix user {id}',
   'perm.unixGroup': 'Unix group {id}',
+  'perm.owner': 'Owner',
+  'perm.group': 'Group',
+  'perm.grantsNothing': 'grants nothing',
+  'perm.grantsNothing.why':
+    'Entries that grant nothing are not a fault: Samba builds the NT ACL out of the POSIX one, and a POSIX entry with no permission bits becomes an ACE with an empty access mask. It is listed because it is in the descriptor.',
   'perm.trustee': 'Account',
   'perm.kind': 'Type',
   'perm.kind.allow': 'Allow',

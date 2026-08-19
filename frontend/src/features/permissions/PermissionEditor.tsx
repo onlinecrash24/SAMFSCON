@@ -101,6 +101,31 @@ export function PermissionEditor({
         {level === 'share' ? t('perm.share.what') : t('perm.file.what')}
       </p>
 
+      {/* Who the descriptor belongs to. `Creator Owner` resolves through the
+          owner, so an editor that hides it is hiding half of what one of its
+          own rows means. */}
+      {(descriptor.data.owner || descriptor.data.group) && (
+        <p className="muted small">
+          {t('perm.owner')}:{' '}
+          <span className="mono">
+            {trusteeLabel(t, descriptor.data.owner ?? '—', descriptor.data.trustees[descriptor.data.owner ?? ''])}
+          </span>
+          {' · '}
+          {t('perm.group')}:{' '}
+          <span className="mono">
+            {trusteeLabel(t, descriptor.data.group ?? '—', descriptor.data.trustees[descriptor.data.group ?? ''])}
+          </span>
+        </p>
+      )}
+
+      {/* Entries that grant nothing are not a fault and not rare: Samba builds
+          an NT ACL out of a POSIX one, and a POSIX entry with no permission
+          bits becomes an ACE with an empty access mask. Said once above the
+          table rather than on every row that has one. */}
+      {descriptor.data.aces.some((ace) => ace.understood && ace.mask === 0) && (
+        <p className="muted small">{t('perm.grantsNothing.why')}</p>
+      )}
+
       <ErrorMessage error={save.error} onDismiss={() => save.reset()} />
 
       <table className="table">
@@ -160,9 +185,11 @@ export function PermissionEditor({
                       permissions dialog is a lie about who may do what. */}
                   {ace.preset === null && (
                     <option value="">
-                      {ace.understood
-                        ? `0x${ace.mask.toString(16).padStart(8, '0')}`
-                        : ace.raw_rights}
+                      {!ace.understood
+                        ? ace.raw_rights
+                        : ace.mask === 0
+                          ? t('perm.grantsNothing')
+                          : `0x${ace.mask.toString(16).padStart(8, '0')}`}
                     </option>
                   )}
                   {PRESETS.map((preset) => (
