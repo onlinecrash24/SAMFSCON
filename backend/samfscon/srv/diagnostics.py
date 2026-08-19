@@ -220,24 +220,60 @@ def _check_privilege(conn: ServerConnection, caps: Capabilities, sid: str | None
         caps.has_disk_operator = True
         return
 
-    # Not held directly. Group membership decides, and that is what the account
-    # lookup already resolved.
+    # Nobody holds it. That absence *is* establishable — an empty list is an
+    # answer — and it is the one case where refusing up front is right.
+    if not holders:
+        caps.has_disk_operator = False
+        caps.notes.append(Note("no_disk_operators", {"command": _grant_command(conn)}))
+        return
+
+    # Held by somebody. Whether that somebody includes us is the part this
+    # cannot settle.
     try:
         groups = identity.current_account(conn).get("groups", [])
-    except Exception:  # noqa: BLE001
+    except Exception:  # noqa: BLE001 — a probe must not break the console
         groups = []
 
     if any(group.get("sid") in holder_sids for group in groups):
         caps.has_disk_operator = True
         return
 
-    caps.has_disk_operator = False
-    if caps.disk_operators:
-        caps.notes.append(
-            Note("disk_operators_are", {"names": ", ".join(caps.disk_operators)})
+    # And here is the honest end of it. GetAliasMembership returns the groups
+    # that contain this SID *directly*. A domain administrator is in
+    # BUILTIN\Administrators through Domain Admins, and no amount of asking this
+    # way will show that — so "not found" is not "not a member", and saying
+    # otherwise disabled the one button the person came to press.
+    #
+    # The server evaluates the whole token when it is asked to do something.
+    # That is the only complete answer, and it costs nothing to let it give one.
+    caps.has_disk_operator = None
+    caps.notes.append(
+        Note(
+            "privilege_unconfirmed",
+            {
+                "holders": ", ".join(caps.disk_operators) or "—",
+                "command": _grant_command(conn),
+            },
         )
-    else:
-        caps.notes.append(Note("no_disk_operators"))
+    )
+
+
+def _grant_command(conn: ServerConnection) -> str:
+    """A command that can be pasted, not a template to be filled in.
+
+    The placeholders were the complaint: `<group>` and `<admin>` are two more
+    things to work out at the moment somebody wants an answer. Everything
+    needed is already known — the domain from the realm, the account from the
+    session — so it is written out.
+    """
+    domain = (
+        conn.target.workgroup
+        or (conn.target.realm.split(".")[0] if conn.target.realm else None)
+        or conn.info.name
+    )
+    admin = getattr(conn, "principal", None) or "Administrator"
+    group = f"{domain}\\Domain Admins" if conn.target.uses_kerberos else "Administrators"
+    return f"net rpc rights grant '{group}' {DISK_OPERATOR_RIGHT} -U {admin}"
 
 
 def require_share_management(caps: Capabilities) -> None:
@@ -259,17 +295,31 @@ def require_share_management(caps: Capabilities) -> None:
                 "Reading works without it; only changes need it."
             ),
         )
+    # Only a confirmed absence. `None` means this check could not resolve the
+    # nested group membership that decides it — and the server evaluates the
+    # whole token anyway, so the attempt goes through and its answer stands.
+    # Refusing here on an unconfirmed guess is how a domain administrator was
+    # told they could not do something they can.
     if caps.has_disk_operator is False:
         raise PermissionDenied(
-            "Your account may not manage this server's shares.",
+            "Nobody on this server may manage its shares.",
             code="missing_disk_operator",
             hint=(
-                "The server checks SeDiskOperatorPrivilege for this. Grant it "
-                "with: net rpc rights grant '<group>' SeDiskOperatorPrivilege "
-                "-U <admin>"
+                "The server checks SeDiskOperatorPrivilege for this, and no "
+                "account or group holds it. Grant it on the server with: "
+                + _grant_command_from(caps)
             ),
             context={"holders": caps.disk_operators},
         )
+
+
+def _grant_command_from(caps: Capabilities) -> str:
+    """The command out of whichever note carries it."""
+    for note in caps.notes:
+        command = note.params.get("command")
+        if command:
+            return str(command)
+    return f"net rpc rights grant '<group>' {DISK_OPERATOR_RIGHT} -U <admin>"
 
 
 def server_facts(conn: ServerConnection) -> dict[str, Any]:

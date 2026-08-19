@@ -257,3 +257,100 @@ def test_a_failing_lookup_does_not_break_the_console(monkeypatch) -> None:
 
     monkeypatch.setattr(identity, "current_account", _boom)
     assert diagnostics._own_sid(_CapConn(None)) is None
+
+
+# ---------------------------------------------------------------------------
+# What the privilege check may and may not conclude
+# ---------------------------------------------------------------------------
+
+
+class _PrivConn:
+    def __init__(self, realm: str | None = "SPAM-DENY.LOCAL") -> None:
+        self.target = _Target(realm, None)
+        self.target.uses_kerberos = realm is not None
+        self.principal = "Administrator"
+
+        class _Info:
+            name = "ZMB-MEMBER"
+
+        self.info = _Info()
+
+
+def _caps(monkeypatch, holders, groups):
+    from samfscon.srv import diagnostics, identity
+
+    monkeypatch.setattr(identity, "accounts_with_right", lambda c, r: holders)
+    monkeypatch.setattr(
+        identity, "current_account", lambda c: {"sid": "S-1-5-21-1-2-3-500", "groups": groups}
+    )
+    caps = diagnostics.Capabilities()
+    diagnostics._check_privilege(_PrivConn(), caps, "S-1-5-21-1-2-3-500")
+    return caps
+
+
+def test_holding_it_directly_is_confirmable(monkeypatch) -> None:
+    caps = _caps(monkeypatch, [{"sid": "S-1-5-21-1-2-3-500", "name": "Administrator"}], [])
+    assert caps.has_disk_operator is True
+
+
+def test_holding_it_through_a_group_we_can_see_is_confirmable(monkeypatch) -> None:
+    caps = _caps(
+        monkeypatch,
+        [{"sid": "S-1-5-32-544", "name": "Administrators"}],
+        [{"sid": "S-1-5-32-544"}],
+    )
+    assert caps.has_disk_operator is True
+
+
+def test_a_nested_membership_is_not_reported_as_an_absence(monkeypatch) -> None:
+    r"""The live complaint.
+
+    GetAliasMembership finds the groups containing a SID directly. A domain
+    administrator is in BUILTIN\Administrators through Domain Admins, and this
+    call cannot see that — so "not found" must not become "does not have it".
+    Saying otherwise disabled the one button the person came to press.
+    """
+    caps = _caps(monkeypatch, [{"sid": "S-1-5-32-544", "name": "Administrators"}], [])
+
+    assert caps.has_disk_operator is None  # not False
+    assert caps.can_manage_shares is None
+    assert any(note.code == "privilege_unconfirmed" for note in caps.notes)
+
+
+def test_nobody_holding_it_is_an_absence_and_is_reported(monkeypatch) -> None:
+    """An empty list is an answer, and the one case worth refusing up front."""
+    caps = _caps(monkeypatch, [], [])
+
+    assert caps.has_disk_operator is False
+    assert caps.can_manage_shares is False
+    assert any(note.code == "no_disk_operators" for note in caps.notes)
+
+
+def test_the_note_carries_a_command_that_can_be_pasted(monkeypatch) -> None:
+    """Placeholders were the complaint: two more things to work out."""
+    caps = _caps(monkeypatch, [{"sid": "S-1-5-32-544", "name": "Administrators"}], [])
+    command = caps.notes[0].params["command"]
+
+    assert "<group>" not in command and "<admin>" not in command
+    assert "SPAM-DENY" in command
+    assert "-U Administrator" in command
+
+
+def test_an_unconfirmed_privilege_does_not_refuse_the_write(monkeypatch) -> None:
+    """The server evaluates the whole token; let it answer."""
+    from samfscon.srv import diagnostics
+
+    caps = _caps(monkeypatch, [{"sid": "S-1-5-32-544", "name": "Administrators"}], [])
+    diagnostics.require_share_management(caps)  # must not raise
+
+
+def test_a_confirmed_absence_does_refuse_it(monkeypatch) -> None:
+    from samfscon.core.errors import PermissionDenied
+    from samfscon.srv import diagnostics
+
+    caps = _caps(monkeypatch, [], [])
+    with pytest.raises(PermissionDenied) as caught:
+        diagnostics.require_share_management(caps)
+
+    assert caught.value.hint is not None
+    assert "net rpc rights grant" in caught.value.hint

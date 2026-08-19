@@ -167,6 +167,10 @@ export const de = {
   'share.group.vfs': 'Module',
   'share.group.advanced': 'Erweitert',
 
+  'caps.note.privilege_unconfirmed':
+    'Ob Ihr Konto Freigaben ändern darf, lässt sich von hier nicht sicher sagen: SeDiskOperatorPrivilege halten {holders}, und ob Sie über eine verschachtelte Gruppe dazugehören, kann diese Prüfung nicht auflösen — das entscheidet der Server, wenn er gefragt wird. Probieren Sie die Änderung. Lehnt er ab, fehlt das Recht wirklich, und dieser Befehl auf dem Server vergibt es: {command}',
+  'caps.note.no_disk_operators.command':
+    'Auf diesem Server hält niemand SeDiskOperatorPrivilege — solange das so ist, kann hier niemand Freigaben ändern. Auf dem Server ausführen: {command}',
   'caps.note.registry_missing':
     'Der Server hat keine erreichbare Registry-Konfiguration — „include = registry“ und „registry shares = yes“ in seiner smb.conf ergänzen.',
   'caps.note.registry_unreadable':
@@ -179,7 +183,7 @@ export const de = {
     'Die SID des angemeldeten Kontos ist unbekannt, darum ließen sich seine Privilegien nicht prüfen.',
   'caps.note.disk_operators_are': 'SeDiskOperatorPrivilege halten: {names}.',
   'caps.note.no_disk_operators':
-    'Auf diesem Server hält niemand SeDiskOperatorPrivilege — mit „net rpc rights grant“ vergeben.',
+    'Auf diesem Server hält niemand SeDiskOperatorPrivilege — solange das so ist, kann hier niemand Freigaben ändern. Auf dem Server ausführen: {command}',
   'caps.noRegistryConfig':
     'Dieser Server ist nicht dafür eingerichtet, Freigaben über das Netz zu verwalten. In den Abschnitt [global] seiner smb.conf „include = registry“ und „registry shares = yes“ eintragen und Samba neu laden. Lesen funktioniert ohne das.',
   'caps.noDiskOperator':
@@ -625,6 +629,10 @@ export const en: Record<MessageKey, string> = {
   'share.group.vfs': 'Modules',
   'share.group.advanced': 'Advanced',
 
+  'caps.note.privilege_unconfirmed':
+    'Whether your account may change shares cannot be said from here: SeDiskOperatorPrivilege is held by {holders}, and whether you belong through a nested group is something this check cannot resolve — the server decides that when it is asked. Try the change. If it refuses, the right really is missing, and this command on the server grants it: {command}',
+  'caps.note.no_disk_operators.command':
+    'Nobody on this server holds SeDiskOperatorPrivilege — while that is so, nobody can change shares here. Run on the server: {command}',
   'caps.note.registry_missing':
     'The server has no reachable registry configuration — add ‘include = registry’ and ‘registry shares = yes’ to its smb.conf.',
   'caps.note.registry_unreadable':
@@ -637,7 +645,7 @@ export const en: Record<MessageKey, string> = {
     'The signed-in account’s SID is unknown, so its privileges could not be checked.',
   'caps.note.disk_operators_are': 'SeDiskOperatorPrivilege is held by: {names}.',
   'caps.note.no_disk_operators':
-    'Nobody on this server holds SeDiskOperatorPrivilege — grant it with ‘net rpc rights grant’.',
+    'Nobody on this server holds SeDiskOperatorPrivilege — while that is so, nobody can change shares here. Run on the server: {command}',
   'caps.noRegistryConfig':
     'This server is not set up for managing shares over the network. Add \u2018include = registry\u2019 and \u2018registry shares = yes\u2019 to the [global] section of its smb.conf and reload Samba. Reading works without it.',
   'caps.noDiskOperator':

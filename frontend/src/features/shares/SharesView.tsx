@@ -47,7 +47,16 @@ export function SharesView({ onChanged }: { onChanged: (message: string) => void
   })
 
   const capabilities = shares.data?.capabilities
-  const canWrite = capabilities?.can_manage_shares === true
+  /**
+   * Whether to offer the write at all.
+   *
+   * `null` means the check could not resolve it — nested group membership is
+   * not something it can follow — and the server evaluates the whole token
+   * anyway. So an unconfirmed answer lets the attempt through and lets the
+   * server give the complete one. Only a confirmed `false` takes the button
+   * away, which happens when nobody on the server holds the privilege at all.
+   */
+  const canWrite = capabilities?.can_manage_shares !== false
 
   return (
     <div className="shares">
@@ -72,17 +81,17 @@ export function SharesView({ onChanged }: { onChanged: (message: string) => void
           with it — they name which query was refused. */}
       {capabilities && capabilities.can_manage_shares !== true && (
         <Banner
-          message={[
-            capabilities.registry_config === false
-              ? t('caps.noRegistryConfig')
-              : capabilities.has_disk_operator === false
-                ? t('caps.noDiskOperator', {
-                    names: capabilities.disk_operators.join(', ') || '—',
-                  })
-                : t('caps.unknownWhy'),
-            ...capabilities.notes.map((note) => noteText(t, note)),
-          ].join(' ')}
-          tone="warning"
+          message={
+            // The notes carry the whole story now, including the command to
+            // run. Prefixing them with a summary produced the same thing said
+            // twice, which is what made the old banner unreadable.
+            capabilities.notes.length > 0
+              ? capabilities.notes.map((note) => noteText(t, note)).join(' ')
+              : capabilities.registry_config === false
+                ? t('caps.noRegistryConfig')
+                : t('caps.unknownWhy')
+          }
+          tone={capabilities.can_manage_shares === false ? 'warning' : 'info'}
         />
       )}
 
