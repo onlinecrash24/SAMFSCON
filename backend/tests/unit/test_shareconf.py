@@ -180,3 +180,37 @@ def test_vfs_modules_are_read_in_order() -> None:
         "shadow_copy2",
     ]
     assert shareconf.vfs_modules({}) == []
+
+
+# ---------------------------------------------------------------------------
+# The catalogue's defaults are what an unset option actually does
+#
+# The interface shows them for a share that stores nothing, so a wrong one here
+# is the console asserting a behaviour the server does not have. These are the
+# four on the first tab, checked against smb.conf's own documented defaults.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("option", "default"),
+    [
+        ("read only", "yes"),
+        ("browseable", "yes"),
+        ("guest ok", "no"),
+        ("available", "yes"),
+    ],
+)
+def test_the_first_tab_options_carry_samba_s_defaults(option: str, default: str) -> None:
+    assert shareconf.BY_NAME[option].default == default
+
+
+def test_every_boolean_option_declares_a_default() -> None:
+    """An unset checkbox has to show something, and it must not be a guess.
+
+    Without a default the interface falls back to "no", which is wrong for
+    every option Samba enables by default — and an unchecked box then claims
+    this share turned something off that it never mentioned.
+    """
+    for option in shareconf.CATALOGUE:
+        if option.type == shareconf.TYPE_BOOL:
+            assert option.default in ("yes", "no"), f"{option.name} has no usable default"

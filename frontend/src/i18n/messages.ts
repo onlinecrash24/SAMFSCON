@@ -151,6 +151,9 @@ export const de = {
   'share.browseable': 'Beim Durchsuchen sichtbar',
   'share.guestOk': 'Zugriff ohne Passwort',
   'share.guestOk.hint': 'Fast nie das, was gemeint war.',
+  'share.default': 'Standard',
+  'share.default.why':
+    'Diese Freigabe setzt die Option nicht; gezeigt wird die Vorgabe des Servers. Sobald Sie sie ändern, wird sie ausdrücklich gesetzt.',
   'share.currentUsers': 'Verbunden',
   'share.fromSmbConf': 'aus der smb.conf',
   'share.fromSmbConf.why':
@@ -613,6 +616,9 @@ export const en: Record<MessageKey, string> = {
   'share.browseable': 'Visible when browsing',
   'share.guestOk': 'Access without a password',
   'share.guestOk.hint': 'Rarely what anyone wants.',
+  'share.default': 'default',
+  'share.default.why':
+    'This share does not set the option; the server’s default is shown. Changing it sets it explicitly.',
   'share.currentUsers': 'Connected',
   'share.fromSmbConf': 'from smb.conf',
   'share.fromSmbConf.why':

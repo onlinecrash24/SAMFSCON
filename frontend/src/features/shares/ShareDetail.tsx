@@ -234,15 +234,27 @@ function OptionField({
   const hint = missingModule ? t('share.needsModule', { module: missingModule }) : spec.doc
 
   if (spec.type === 'bool') {
+    // Three states, not two. An option this share does not store is not "no" —
+    // it is "not set, and the server's default applies", and Samba's default is
+    // `yes` for several of these. An unchecked box claiming otherwise is the
+    // interface asserting something it was never told.
+    const stored = value !== ''
+    const effective = stored ? value : (spec.default ?? 'no')
+
     return (
       <label className="checkbox">
         <input
           type="checkbox"
-          checked={value === 'yes'}
+          checked={effective === 'yes'}
           disabled={disabled}
           onChange={(event) => onChange(event.target.checked ? 'yes' : 'no')}
         />
         <span>{spec.name}</span>
+        {!stored && (
+          <span className="option__default" title={t('share.default.why')}>
+            {t('share.default')}
+          </span>
+        )}
         <span className="field__hint">{hint}</span>
       </label>
     )

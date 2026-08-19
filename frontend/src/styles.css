@@ -1071,3 +1071,14 @@ fieldset[disabled] { opacity: 0.6; }
    it is right — but it is a weaker kind of right, and the difference belongs
    where somebody deciding a permission can see it. */
 .perm__derived { display: block; font-style: italic; }
+
+/* A value shown because the share does not set it. Quiet, and next to the
+   control rather than under it: the point is that the box's state is not this
+   share's decision. */
+.option__default {
+  padding: 0 6px;
+  border-radius: 10px;
+  background: var(--hover);
+  color: var(--text-muted);
+  font-size: 0.75em;
+}
