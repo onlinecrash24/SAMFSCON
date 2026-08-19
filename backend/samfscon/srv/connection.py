@@ -473,8 +473,9 @@ def _open_tree(host: str, share: str, lp: Any, creds: Any) -> Any:
     for attempt in attempts:
         try:
             return attempt()
-        except TypeError as exc:
-            errors.append(str(exc))
+        except (TypeError, AttributeError) as exc:
+            # A wrong signature, or a type this Samba build does not have.
+            errors.append(f"{type(exc).__name__}: {exc}")
             continue
         except Exception as exc:
             raise translate(exc) from exc

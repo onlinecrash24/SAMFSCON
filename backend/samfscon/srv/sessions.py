@@ -413,7 +413,9 @@ def _attempt(*attempts: Any) -> Any:
     for attempt in attempts:
         try:
             return attempt()
-        except TypeError as exc:
-            errors.append(str(exc))
+        except (TypeError, AttributeError) as exc:
+            # A wrong signature, or a type this Samba build does not have.
+            # Both mean "not this shape"; neither came from the server.
+            errors.append(f"{type(exc).__name__}: {exc}")
             continue
     raise TypeError("; ".join(errors))

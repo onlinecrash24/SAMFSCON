@@ -225,11 +225,17 @@ def _string(value: str) -> Any:
     """A winreg.String, which is what every name argument wants.
 
     Passing a bare ``str`` works on some builds and raises a TypeError on
-    others; wrapping always works.
+    others; wrapping works where the type exists. Where it does not, the bare
+    string is the only thing left to try — and a call that then fails says so
+    through the candidate chain rather than through an AttributeError raised
+    while assembling an argument.
     """
     from samba.dcerpc import winreg
 
-    name = winreg.String()
+    try:
+        name = winreg.String()
+    except AttributeError:  # pragma: no cover - depends on the build
+        return value
     name.name = value
     return name
 
@@ -247,22 +253,25 @@ def _open_key(pipe: Any, parent: Any, path: str, access: int) -> Any:
 
 
 def _create_key(pipe: Any, parent: Any, path: str, access: int) -> Any:
-    from samba.dcerpc import winreg
+    """Create a key, or open the one that is already there.
 
-    def _with_action():
-        action = winreg.CreateAction()
-        return pipe.CreateKey(parent, _string(path), _string(""), 0, access, None, action)
-
+    ``action_taken`` is [in,out,unique] in the IDL, so None is a legal value and
+    the server simply does not report which of the two it did — which is fine,
+    because either outcome is the one wanted. The first version of this tried to
+    construct a ``winreg.CreateAction`` to receive it; that type does not exist
+    in every build, and the AttributeError took the whole call down.
+    """
     result = _call(
         pipe,
         "CreateKey",
         (
-            _with_action,
             lambda: pipe.CreateKey(parent, _string(path), _string(""), 0, access, None, None),
+            # A build that wants the field present rather than absent.
+            lambda: pipe.CreateKey(parent, _string(path), _string(""), 0, access, None, 0),
         ),
         what=path,
     )
-    # Some builds return (handle, action), others just the handle.
+    # Some builds return (handle, action_taken), others just the handle.
     if isinstance(result, tuple):
         return result[0]
     return result
@@ -388,17 +397,23 @@ def _enumerate_keys(pipe: Any, key: Any) -> list[str]:
 def _call(pipe: Any, operation: str, attempts: tuple[Any, ...], *, what: str) -> Any:
     """Run the first call shape this binding accepts.
 
-    A ``TypeError`` means the signature was wrong and the next shape is worth
-    trying. Anything else came from the server and is translated — trying
+    A ``TypeError`` means the signature was wrong, and an ``AttributeError``
+    means a type or method this build does not have — both are "not this shape,
+    try the next". Anything else came from the server and is translated: trying
     another argument order against a server that already said "access denied"
     would only ask it twice.
+
+    The AttributeError case is here because it was not, and a
+    ``winreg.CreateAction`` that exists in some builds and not others took every
+    share creation down with an "unexpected error" instead of moving to the
+    candidate beside it.
     """
     errors: list[str] = []
     for attempt in attempts:
         try:
             return attempt()
-        except TypeError as exc:
-            errors.append(str(exc))
+        except (TypeError, AttributeError) as exc:
+            errors.append(f"{type(exc).__name__}: {exc}")
             continue
         except Exception as exc:
             raise translate(exc) from exc

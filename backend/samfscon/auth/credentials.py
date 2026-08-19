@@ -139,8 +139,9 @@ def _kerberos_credentials(creds: Any, session: Any, lp: Any) -> Any:
         try:
             attempt()
             return creds
-        except TypeError as exc:
-            errors.append(str(exc))
+        except (TypeError, AttributeError) as exc:
+            # A wrong signature, or a type this Samba build does not have.
+            errors.append(f"{type(exc).__name__}: {exc}")
             continue
 
     raise SamfsconError(
