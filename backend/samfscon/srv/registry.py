@@ -347,9 +347,9 @@ def _enumerate_values(pipe: Any, key: Any) -> list[tuple[str, str]]:
                 result, shape = _first_shape(candidates)
             else:
                 result = candidates[shape]()
-        except _WalkFinished:
-            break
         except Exception as exc:  # noqa: BLE001 — one bad key must not end a listing
+            if _is_walk_end(exc):
+                break
             # With the detail. "No known form was accepted" on its own says
             # nothing; the argument counts inside it name the mismatch, and
             # that is the whole reason the chain records them.
@@ -374,6 +374,18 @@ def _enumerate_values(pipe: Any, key: Any) -> list[tuple[str, str]]:
 
 class _WalkFinished(Exception):
     """WERR_NO_MORE_ITEMS: the documented end, not a failure."""
+
+
+def _is_walk_end(exc: BaseException) -> bool:
+    """Whether this is the enumeration saying "that was all".
+
+    Checked in both places a walk can end, which it was not: the shape is
+    decided on the first index and reused, so from the second index onwards the
+    ordinary end of every enumeration went to the failure handler and was logged
+    as a warning. Five values read perfectly and one warning per listing to show
+    for it.
+    """
+    return isinstance(exc, _WalkFinished) or "NO_MORE_ITEMS" in str(exc).upper()
 
 
 def _enum_value_shapes(pipe: Any, key: Any, index: int, name: Any) -> list[Any]:
@@ -522,9 +534,9 @@ def _enumerate_keys(pipe: Any, key: Any) -> list[str]:
                 result, shape = _first_shape(candidates)
             else:
                 result = candidates[shape]()
-        except _WalkFinished:
-            break
         except Exception as exc:  # noqa: BLE001 — one bad key must not end a listing
+            if _is_walk_end(exc):
+                break
             logger.warning(
                 "reading registry key %d failed (%s); detail: %s; "
                 "the ones already read stand",

@@ -281,14 +281,35 @@ def test_the_registry_walk_tells_the_end_from_a_failure() -> None:
 
     A key whose values could not be read then reported as a key with no values,
     which is the same silent-absence fault as everywhere else in this codebase.
+
+    And the reverse, which was the second half of it: the shape is decided on
+    the first index and reused, so from the second index onwards the ordinary
+    end of every enumeration went to the failure handler. Five values read
+    correctly and a warning logged for the sixth, every single listing.
     """
     import inspect
 
     from samfscon.srv import registry
 
-    source = inspect.getsource(registry._enumerate_values)
-    assert "_WalkFinished" in source
-    assert "logger.warning" in source
+    for walk in (registry._enumerate_values, registry._enumerate_keys):
+        source = inspect.getsource(walk)
+        assert "_is_walk_end(exc)" in source, f"{walk.__name__} does not check for the end"
+        assert "logger.warning" in source, f"{walk.__name__} fails silently"
+
+
+@pytest.mark.parametrize(
+    ("exc", "is_end"),
+    [
+        (RuntimeError("(259, 'WERR_NO_MORE_ITEMS')"), True),
+        (RuntimeError("werr_no_more_items"), True),
+        (RuntimeError("(87, 'WERR_INVALID_PARAMETER')"), False),
+        (RuntimeError("(5, 'WERR_ACCESS_DENIED')"), False),
+    ],
+)
+def test_only_one_status_ends_a_walk(exc: Exception, is_end: bool) -> None:
+    from samfscon.srv import registry
+
+    assert registry._is_walk_end(exc) is is_end
 
 
 def test_the_two_enumerations_ask_for_the_types_their_calls_declare() -> None:
