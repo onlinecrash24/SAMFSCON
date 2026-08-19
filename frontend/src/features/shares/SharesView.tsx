@@ -135,11 +135,16 @@ export function SharesView({ onChanged }: { onChanged: (message: string) => void
       {creating && (
         <NewShareDialog
           onClose={() => setCreating(false)}
-          onDone={(name) => {
+          onDone={(name, served) => {
             setCreating(false)
             setSelected(name)
             void queryClient.invalidateQueries({ queryKey: ['shares'] })
-            onChanged(t('share.created', { name }))
+            // Written either way. Whether the server has re-read its
+            // configuration is a different fact, and worth saying rather than
+            // leaving somebody to wonder where their share went.
+            onChanged(
+              served ? t('share.created', { name }) : t('share.createdNotServed', { name }),
+            )
           }}
         />
       )}
@@ -190,7 +195,16 @@ function ShareRow({
             <span className="list__name">{share.name}</span>
             {/* Not a warning — a fact about where this share is configured. */}
             {!share.editable && <Badge tone="muted">{t('share.fromSmbConf')}</Badge>}
-            {share.current_users ? <Badge tone="ok">{share.current_users}</Badge> : null}
+            {/* How many clients have it open. As a bare number it read as
+                an unexplained "1" beside the name — which is what it was
+                asked about. */}
+            {share.current_users ? (
+              <Badge tone="ok">
+                <span title={t('share.connected.why')}>
+                  {t('share.connectedCount', { count: share.current_users })}
+                </span>
+              </Badge>
+            ) : null}
           </span>
           <span className="list__meta mono">{share.path ?? '—'}</span>
           {share.comment && <span className="list__meta">{share.comment}</span>}

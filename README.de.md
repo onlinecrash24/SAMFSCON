@@ -74,12 +74,16 @@ Servers:
     registry shares = yes
 ```
 
-Beide Zeilen, und sie tun Verschiedenes. `include = registry` lässt Samba den Speicher lesen;
-**`registry shares = yes` lässt es ausliefern, was darin steht** — ohne diese Zeile lässt sich eine
-Freigabe einwandfrei schreiben und erscheint trotzdem nie. Der Speicher ist auf jedem Samba
-öffenbar und für jeden Administrator beschreibbar, keines von beidem belegt also, dass diese Zeile
-gesetzt ist. SAMFSCON prüft es daran, ob Registry-Abschnitte existieren, die der Server nicht
-ausliefert, und sagt es dann.
+Beide Zeilen, und sie tun Verschiedenes. `include = registry` lässt Samba den Speicher lesen,
+`registry shares = yes` lässt es ausliefern, was darin steht. Der Speicher ist auf jedem Samba
+öffenbar und für jeden Administrator beschreibbar — keines von beidem belegt also, dass die zweite
+Zeile gesetzt ist. SAMFSCON prüft es daran, ob Registry-Abschnitte existieren, die der Server nicht
+ausliefert.
+
+**Erscheint eine Freigabe nicht sofort, ist das meist kein Konfigurationsfehler.** smbd liest die
+Registry nach eigenem Zeitplan neu, eine korrekte und vollständige Freigabe kann also einen Moment
+unsichtbar sein. `smbcontrol all reload-config` auf dem Server klärt das. SAMFSCON sagt, welcher
+der beiden Fälle vorliegt, statt eine geschriebene Freigabe als Fehlschlag zu melden.
 
 Eine Freigabe ist ein Schlüssel unter `HKLM\Software\Samba\smbconf` mit einem `path`-Wert;
 SAMFSCON schreibt ihn über `winreg`, und Samba lädt Registry-Freigaben bei Bedarf. Genau das tut

@@ -154,6 +154,10 @@ export const de = {
   'share.default': 'Standard',
   'share.default.why':
     'Diese Freigabe setzt die Option nicht; gezeigt wird die Vorgabe des Servers. Sobald Sie sie ändern, wird sie ausdrücklich gesetzt.',
+  'share.connectedCount': '{count} verbunden',
+  'share.connected.why': 'So viele Clients haben diese Freigabe gerade geöffnet.',
+  'share.createdNotServed':
+    'Die Freigabe {name} wurde geschrieben, der Server liefert sie aber noch nicht aus. Auf dem Server „smbcontrol all reload-config“ ausführen — die Konfiguration ist vollständig, es fehlt nur, dass Samba sie liest.',
   'share.currentUsers': 'Verbunden',
   'share.fromSmbConf': 'aus der smb.conf',
   'share.fromSmbConf.why':
@@ -630,6 +634,10 @@ export const en: Record<MessageKey, string> = {
   'share.default': 'default',
   'share.default.why':
     'This share does not set the option; the server’s default is shown. Changing it sets it explicitly.',
+  'share.connectedCount': '{count} connected',
+  'share.connected.why': 'How many clients have this share open right now.',
+  'share.createdNotServed':
+    'The share {name} was written, but the server is not serving it yet. Run ‘smbcontrol all reload-config’ on the server — the configuration is complete; Samba has simply not read it.',
   'share.currentUsers': 'Connected',
   'share.fromSmbConf': 'from smb.conf',
   'share.fromSmbConf.why':

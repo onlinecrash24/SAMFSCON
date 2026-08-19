@@ -340,17 +340,6 @@ def require_share_management(caps: Capabilities) -> None:
                 "Reading works without it; only changes need it."
             ),
         )
-    if caps.registry_shares_served is False:
-        raise NotConfigured(
-            "This server does not serve registry shares.",
-            code="registry_shares_disabled",
-            hint=(
-                "It already has share configuration in its registry that it is "
-                "ignoring. Add 'registry shares = yes' to the [global] section "
-                "of its smb.conf and reload Samba."
-            ),
-        )
-
     if caps.registry_writable is False:
         raise PermissionDenied(
             "Your account may not change this server's configuration.",

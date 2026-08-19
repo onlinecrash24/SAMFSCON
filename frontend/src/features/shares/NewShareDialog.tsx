@@ -23,7 +23,7 @@ export function NewShareDialog({
   onDone,
 }: {
   onClose: () => void
-  onDone: (name: string) => void
+  onDone: (name: string, served: boolean) => void
 }) {
   const { t } = useI18n()
   const [name, setName] = useState('')
@@ -44,7 +44,7 @@ export function NewShareDialog({
         guest_ok: guestOk,
         options: {},
       }),
-    onSuccess: () => onDone(name.trim()),
+    onSuccess: (result) => onDone(name.trim(), result.served !== false),
   })
 
   function submit(event: FormEvent) {

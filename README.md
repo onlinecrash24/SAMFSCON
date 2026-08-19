@@ -73,10 +73,14 @@ sessions, open files, permissions and local accounts.
 ```
 
 Both lines, and they do different things. `include = registry` makes Samba read the store;
-**`registry shares = yes` is what makes it serve what is in there**, and without it a share can be
-written perfectly and simply never appear. The store is openable on every Samba and writable for
-any administrator, so neither of those is evidence that this line is set — SAMFSCON checks by
-looking for registry sections the server is not serving, and says so when it finds them.
+`registry shares = yes` makes it serve what is in there. The store is openable on every Samba and
+writable for any administrator, so neither of those is evidence that the second line is set —
+SAMFSCON checks by looking for registry sections the server is not serving.
+
+**A share that does not appear straight away is usually not a configuration fault.** smbd re-reads
+the registry on its own schedule, so a correct and complete share can be invisible for a moment.
+`smbcontrol all reload-config` on the server settles it. SAMFSCON says which of the two happened
+rather than reporting a written share as a failure.
 
 A share is a key under `HKLM\Software\Samba\smbconf` with a `path` value, SAMFSCON writes it over
 `winreg`, and Samba loads registry shares on demand. It is the same thing `net rpc conf addshare`

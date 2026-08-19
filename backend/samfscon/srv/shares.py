@@ -27,13 +27,7 @@ import logging
 from dataclasses import dataclass, field
 from typing import Any
 
-from samfscon.core.errors import (
-    Conflict,
-    InvalidRequest,
-    NotConfigured,
-    NotFound,
-    translate,
-)
+from samfscon.core.errors import Conflict, InvalidRequest, NotFound, translate
 from samfscon.srv import registry, shareconf
 from samfscon.srv.connection import ServerConnection
 
@@ -217,30 +211,32 @@ def create_share(
             registry.delete_section(conn, name)
         raise error from exc
 
-    # Written. Now ask the server whether it has one — the same check anybody
-    # would run afterwards, and the only thing that distinguishes a share from a
-    # registry key nobody reads.
-    if not _exists(conn, name):
-        logger.warning(
-            "the registry key for %s was written but the server serves no such share",
-            name,
-        )
-        raise NotConfigured(
-            "The share was written, but this server does not serve registry shares.",
-            code="registry_shares_disabled",
-            hint=(
-                "Add 'registry shares = yes' to the [global] section of the "
-                "server's smb.conf and reload Samba. The configuration for this "
-                "share is already in place and will take effect then — nothing "
-                "needs entering again. Without it Samba ignores everything under "
-                "HKLM\\Software\\Samba\\smbconf, which is where every share this "
-                "console writes goes."
-            ),
-            context={"share": name},
+    # Written. Whether the server is serving it yet is a separate question, and
+    # not one that makes this a failure: smbd re-reads the registry on its own
+    # schedule, so a share that is correct and complete can be invisible for a
+    # moment.
+    #
+    # The first version of this raised an error saying `registry shares = yes`
+    # was missing. It was not — the line was already there, and one
+    # `smbcontrol all reload-config` was the whole fix. Reporting a correct
+    # creation as a configuration fault sent somebody to change a setting that
+    # was right.
+    served = _exists(conn, name)
+    if not served:
+        logger.info(
+            "the registry key for %s is written; the server is not serving it yet", name
         )
 
     logger.info("share created: %s -> %s", name, path)
-    return {"name": name, "path": path, "comment": comment, "options": applied}
+    return {
+        "name": name,
+        "path": path,
+        "comment": comment,
+        "options": applied,
+        # Which of the two happened, so the interface can say so rather than
+        # reporting a success that looks like nothing happened.
+        "served": served,
+    }
 
 
 def update_share(
