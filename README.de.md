@@ -219,7 +219,7 @@ hieße, auf ein Ticket zu warten, das kein KDC ausstellen wird.
 | 1b | Freigaben: anlegen, ändern, löschen, mit dem smb.conf-Optionskatalog | gebaut |
 | 1c | Berechtigungen: Freigabe- und Dateiebene, mit der Berechnung der tatsächlichen Rechte | gebaut |
 | 1d | Sitzungen und offene Dateien, inklusive Erzwingen des Schließens | gebaut |
-| 1e | Lokale Benutzer und Gruppen auf einem eigenständigen Server (SAMR) | **noch nicht gebaut** |
+| 1e | Lokale Benutzer und Gruppen auf einem eigenständigen Server (SAMR) | gebaut |
 | 2 | Globale Servereinstellungen, Diagnoseansicht, Freigabevorlagen | geplant |
 
 **Nichts davon ist bisher gegen einen laufenden Samba-Server verifiziert.** Die Unit-Suite (127

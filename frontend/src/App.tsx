@@ -5,6 +5,7 @@ import { LoginView } from './components/LoginView'
 import { LogoMark } from './components/Logo'
 import { Badge, Icon, Spinner } from './components/primitives'
 import { SNAPINS, DEFAULT_SNAPIN, type SnapinId } from './features/console/snapins'
+import { AccountsView } from './features/accounts/AccountsView'
 import { SessionsView } from './features/sessions/SessionsView'
 import { SharesView } from './features/shares/SharesView'
 import { useI18n } from './i18n'
@@ -79,6 +80,8 @@ function Console({ session }: { session: SessionInfo }) {
             <SharesView onChanged={setNotice} />
           ) : snapin === 'sessions' ? (
             <SessionsView onChanged={setNotice} />
+          ) : snapin === 'accounts' && session.server.mode === 'standalone' ? (
+            <AccountsView onChanged={setNotice} />
           ) : (
             <SnapinPlaceholder id={snapin} session={session} />
           )}

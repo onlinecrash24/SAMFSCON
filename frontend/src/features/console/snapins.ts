@@ -62,7 +62,7 @@ export const SNAPINS: Snapin[] = [
     id: 'accounts',
     label: 'snapin.accounts',
     icon: 'user',
-    available: false,
+    available: true,
     note: 'snapin.accounts.note',
     standaloneOnly: true,
   },

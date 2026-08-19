@@ -9,9 +9,13 @@
 
 import { http, param } from './client'
 import type {
+  AccountCreate,
+  AccountUpdate,
   AppInfo,
   DirectoryListing,
   EffectiveAccess,
+  LocalAccount,
+  LocalGroup,
   LoginOptions,
   OpenFile,
   OptionSpec,
@@ -172,5 +176,35 @@ export const api = {
   createDirectory: (share: string, path: string) =>
     http.post<{ share: string; path: string; status: string }>(
       `/files/directory?share=${param(share)}&path=${param(path)}`,
+    ),
+
+  // -- local users and groups (standalone servers only) ---------------------
+
+  localUsers: () => http.get<{ entries: LocalAccount[] }>('/accounts/users'),
+
+  localGroups: () => http.get<{ entries: LocalGroup[] }>('/accounts/groups'),
+
+  createLocalUser: (account: AccountCreate) =>
+    http.post<{ name: string; rid: number; disabled: boolean }>('/accounts/users', account),
+
+  updateLocalUser: (name: string, changes: AccountUpdate) =>
+    http.patch<{ name: string; changes: Record<string, unknown> }>(
+      `/accounts/users/${param(name)}`,
+      changes,
+    ),
+
+  /** The password goes in the body and comes back in nothing. */
+  setLocalPassword: (name: string, password: string) =>
+    http.post<{ name: string; status: string }>(`/accounts/users/${param(name)}/password`, {
+      password,
+    }),
+
+  deleteLocalUser: (name: string) =>
+    http.delete<{ name: string; status: string }>(`/accounts/users/${param(name)}`),
+
+  setGroupMembers: (group: string, add: string[], remove: string[]) =>
+    http.post<{ group: string; added: string[]; removed: string[] }>(
+      `/accounts/groups/${param(group)}/members`,
+      { add, remove },
     ),
 }

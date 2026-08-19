@@ -388,3 +388,45 @@ export interface DirectoryListing {
   entries: DirectoryEntry[]
   truncated: boolean
 }
+
+// ---------------------------------------------------------------------------
+// Local users and groups — standalone servers only
+// ---------------------------------------------------------------------------
+
+export interface LocalAccount {
+  name: string
+  rid: number
+  sid: string | null
+  full_name: string | null
+  description: string | null
+  disabled: boolean
+  locked_out: boolean
+  password_never_expires: boolean
+  /** The server's own accounts: not offered for deletion. */
+  protected: boolean
+}
+
+export interface LocalGroup {
+  name: string
+  rid: number
+  sid: string | null
+  description: string | null
+  /** SIDs, because a local group can contain domain accounts. */
+  members: string[]
+}
+
+export interface AccountCreate {
+  name: string
+  password: string
+  full_name: string | null
+  description: string | null
+  disabled: boolean
+  password_never_expires: boolean
+}
+
+export interface AccountUpdate {
+  full_name?: string
+  description?: string
+  disabled?: boolean
+  password_never_expires?: boolean
+}

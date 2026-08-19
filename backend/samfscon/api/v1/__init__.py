@@ -3,6 +3,7 @@
 from fastapi import APIRouter
 
 from samfscon.api.v1 import (
+    accounts,
     auth,
     files,
     health,
@@ -22,5 +23,6 @@ router.include_router(shares.router)
 router.include_router(permissions.router)
 router.include_router(sessions.router)
 router.include_router(files.router)
+router.include_router(accounts.router)
 
 __all__ = ["router"]

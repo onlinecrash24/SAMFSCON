@@ -212,7 +212,7 @@ Kerberos made unnecessary; guessing the other way would wait for a ticket no KDC
 | 1b | Shares: create, change, delete, with the smb.conf option catalogue | built |
 | 1c | Permissions: share-level and file-level, with the effective-access calculation | built |
 | 1d | Sessions and open files, including force-closing one | built |
-| 1e | Local users and groups on a standalone server (SAMR) | **not built yet** |
+| 1e | Local users and groups on a standalone server (SAMR) | built |
 | 2 | Global server settings, the diagnostics view, share templates | planned |
 
 **Nothing here has yet been verified against a live Samba server.** The unit suite (127 tests)
