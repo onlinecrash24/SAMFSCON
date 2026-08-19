@@ -14,10 +14,25 @@ A target comes from one of three places, in this order of precedence:
 
 from __future__ import annotations
 
+import ipaddress
 from dataclasses import dataclass, replace
 
 from samfscon.config import MODE_AD_MEMBER, MODE_AUTO, MODE_STANDALONE
 from samfscon.core.errors import InvalidRequest
+
+
+def _is_address(host: str) -> bool:
+    """Whether *host* is a literal address rather than a name.
+
+    Duplicated from :mod:`samfscon.srv.discovery` rather than imported: this
+    module is the one everything else imports, and a dependency on the probe
+    would put a network module underneath a value object.
+    """
+    try:
+        ipaddress.ip_address(host.strip("[]"))
+    except ValueError:
+        return False
+    return True
 
 
 @dataclass(frozen=True)
@@ -74,13 +89,25 @@ class ServerTarget:
     def kerberos_host(self) -> str:
         """The name to build the SMB connection on in ad_member mode.
 
-        The discovered FQDN wins over whatever was typed. Kerberos issues
-        tickets for ``cifs/<hostname>@REALM``, and for a bare address no such
-        principal exists — the bind then fails with NT_STATUS_INVALID_PARAMETER
-        long after the ticket was obtained without complaint. This is the same
-        trap SAMADCON hits on the LDAP side, for the same reason.
+        Kerberos issues tickets for ``cifs/<hostname>@REALM``, and for a bare
+        address no such principal exists — the bind then fails with
+        NT_STATUS_INVALID_PARAMETER long after the ticket was obtained without
+        complaint. This is the same trap SAMADCON hits on the LDAP side, for
+        the same reason.
+
+        Three sources, in descending order of trust:
+
+        1. the name the server reported (or that reverse DNS supplied),
+        2. its NetBIOS name in its realm — and the realm may well come from the
+           administrator rather than from the probe, which is exactly the case
+           on a server that answers srvsvc and refuses the LSA policy query,
+        3. whatever was typed, which is only usable if it is already a name.
         """
-        return self.server_fqdn or self.host
+        if self.server_fqdn:
+            return self.server_fqdn
+        if self.netbios_name and self.realm and _is_address(self.host):
+            return f"{self.netbios_name.lower()}.{self.realm.lower()}"
+        return self.host
 
     @property
     def kdc_hosts(self) -> tuple[str, ...]:

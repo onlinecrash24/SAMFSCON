@@ -214,8 +214,9 @@ def _require_decision(settings: Settings, target: ServerTarget) -> ServerTarget:
             code="mode_undecided",
             hint=(
                 "The server answered no unauthenticated query — usually "
-                "'restrict anonymous'. Choose 'domain member' or 'standalone' "
-                "in the sign-in form."
+                "'restrict anonymous'. Say which it is: pick it in the sign-in "
+                "form, or pass --mode ad_member / --mode standalone to "
+                "samfsconctl. A domain member also needs its realm."
             ),
             context={"host": target.host},
         )

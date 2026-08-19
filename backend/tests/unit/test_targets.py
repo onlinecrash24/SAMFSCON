@@ -405,3 +405,100 @@ def test_a_missing_ptr_record_is_reported_rather_than_raised(
 
     assert probe.server_fqdn is None
     assert any("reverse DNS" in note for note in probe.notes)
+
+
+# ---------------------------------------------------------------------------
+# The server that answers srvsvc and refuses the policy query
+#
+# Modelled on a real one: a Samba AD member that reported its account domain and
+# its comment, and declined the LSA DNS-domain query. Every assertion here comes
+# from that probe's actual output.
+# ---------------------------------------------------------------------------
+
+
+def test_srvsvc_answers_the_question_the_policy_query_refused() -> None:
+    """SV_TYPE_DOMAIN_MEMBER is the server saying so in its own words."""
+    probe = _decide(
+        account_policy_read=True,
+        netbios_name="ZMB-MEMBER",
+        server_type=discovery.SV_TYPE_DOMAIN_MEMBER | discovery.SV_TYPE_SERVER_NT,
+    )
+
+    assert probe.mode == MODE_AD_MEMBER
+    # The realm is still unknown — the query that names it was refused — so the
+    # note has to say that rather than leave a member with no realm looking fine.
+    assert probe.realm is None
+    assert any("realm has to be given" in note for note in probe.notes)
+
+
+def test_an_absent_member_flag_decides_nothing() -> None:
+    """Positive evidence decides; absence of evidence does not.
+
+    The same rule as everywhere else here, and the one that keeps this from
+    repeating the mistake of reading silence as "standalone".
+    """
+    probe = _decide(
+        account_policy_read=True,
+        netbios_name="FS1",
+        server_type=discovery.SV_TYPE_SERVER_NT,
+    )
+    assert probe.mode == MODE_AUTO
+
+
+def test_a_server_that_answered_neither_still_decides_nothing() -> None:
+    probe = _decide(account_policy_read=True, netbios_name="FS1")
+    assert probe.mode == MODE_AUTO
+
+
+def test_the_realm_the_administrator_supplies_completes_the_name(
+    monkeypatch: pytest.MonkeyPatch, settings: Settings
+) -> None:
+    """The whole live failure, end to end, in the shape it actually occurred.
+
+    The probe knows the server is ZMB-MEMBER and a domain member; it cannot know
+    the realm, because that query was refused, and there is no PTR record. The
+    administrator supplies SPAM-DENY.LOCAL, and the two halves compose into the
+    name Kerberos can actually be asked for.
+    """
+    _stub_probe(
+        monkeypatch,
+        ServerProbe(
+            host="192.168.1.41",
+            reachable=True,
+            mode=MODE_AD_MEMBER,
+            account_policy_read=True,
+            netbios_name="ZMB-MEMBER",
+            server_type=discovery.SV_TYPE_DOMAIN_MEMBER,
+        ),
+    )
+
+    target = targets.resolve_target(
+        settings, server="192.168.1.41", realm="SPAM-DENY.LOCAL"
+    )
+
+    assert target.mode == MODE_AD_MEMBER
+    assert target.kerberos_host == "zmb-member.spam-deny.local"
+
+
+def test_a_typed_name_is_never_second_guessed() -> None:
+    """Composition is only for an address. A name given is a name used."""
+    target = ServerTarget(
+        host="fileserver.example.lan",
+        mode=MODE_AD_MEMBER,
+        realm="EXAMPLE.LAN",
+        netbios_name="FS1",
+    )
+    assert target.kerberos_host == "fileserver.example.lan"
+
+
+def test_the_undecided_hint_works_from_the_command_line_too(
+    monkeypatch: pytest.MonkeyPatch, settings: Settings
+) -> None:
+    """It used to say "in the sign-in form" to somebody running samfsconctl."""
+    _stub_probe(monkeypatch, ServerProbe(host="192.168.1.41", reachable=True))
+
+    with pytest.raises(InvalidRequest) as caught:
+        targets.resolve_target(settings, server="192.168.1.41")
+
+    assert caught.value.hint is not None
+    assert "--mode" in caught.value.hint

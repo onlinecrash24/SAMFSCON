@@ -46,6 +46,11 @@ LSA_POLICY_INFO_DNS = 12
 # about the server's role.
 SV_TYPE_DOMAIN_CTRL = 0x00000008
 SV_TYPE_DOMAIN_BAKCTRL = 0x00000010
+# The server saying, in its own words, that it is joined to a domain. Samba sets
+# it for `security = ads` and `security = domain` and not for `security = user`,
+# which makes it a second, independent answer to the question the LSA policy
+# query is so often configured to refuse.
+SV_TYPE_DOMAIN_MEMBER = 0x00000100
 SV_TYPE_SERVER_NT = 0x00008000
 
 
@@ -64,6 +69,9 @@ class ServerProbe:
     os_version: str | None = None
     comment: str | None = None
     is_domain_controller: bool = False
+    # srvsvc's server_type word, kept whole. None when srvsvc did not answer —
+    # which is a different thing from a server that answered with no flags set.
+    server_type: int | None = None
     # Whether the two policy queries were *answered*, which is not the same as
     # what they said. A refused query and a query that reported no DNS domain
     # look identical in the fields above and mean opposite things: the first is
@@ -94,6 +102,7 @@ class ServerProbe:
             "os_version": self.os_version,
             "comment": self.comment,
             "is_domain_controller": self.is_domain_controller,
+            "server_type": self.server_type,
             "account_policy_read": self.account_policy_read,
             "dns_policy_read": self.dns_policy_read,
             "notes": list(self.notes),
@@ -331,12 +340,11 @@ def _probe_srvsvc(result: ServerProbe, lp: Any, creds: Any) -> None:
 
     if name:
         result.netbios_name = result.netbios_name or name.upper()
-        # srvsvc reports the NetBIOS name. The FQDN is that name in the DNS
-        # domain, which is only knowable once the realm is: on a standalone
-        # server there is no domain to append.
-        if result.realm and "." not in name:
-            result.server_fqdn = f"{name.lower()}.{result.realm.lower()}"
-        elif "." in name:
+        # srvsvc reports the NetBIOS name. Composing an FQDN out of it needs a
+        # realm, which may arrive later from the administrator rather than from
+        # here — so that is done in one place, once everything is in
+        # (_derive_fqdn, and ServerTarget.kerberos_host for what the form adds).
+        if "." in name:
             result.server_fqdn = name.lower()
     if comment:
         result.comment = comment
@@ -344,6 +352,7 @@ def _probe_srvsvc(result: ServerProbe, lp: Any, creds: Any) -> None:
         result.os_version = f"{major}.{minor}"
 
     server_type = int(getattr(info, "server_type", 0) or 0)
+    result.server_type = server_type
     result.is_domain_controller = bool(server_type & (SV_TYPE_DOMAIN_CTRL | SV_TYPE_DOMAIN_BAKCTRL))
 
 
@@ -362,6 +371,22 @@ def _decide_mode(result: ServerProbe) -> None:
     unnecessary, and failing with a logon error that named the wrong problem.
     """
     if not result.dns_policy_read:
+        # The policy query was refused, but srvsvc may have answered — and its
+        # server_type says whether the server is joined to a domain. Positive
+        # evidence only: the flag being *set* decides, the flag being absent
+        # does not. That asymmetry is the same rule as everywhere else here —
+        # a thing not said is not a thing denied — and it is what keeps this
+        # from repeating the mistake of reading silence as "standalone".
+        if result.server_type is not None and result.server_type & SV_TYPE_DOMAIN_MEMBER:
+            result.mode = MODE_AD_MEMBER
+            result.notes.append(
+                "the server reports itself as joined to a domain, so it is a domain "
+                "member — but it refused the query that would name the realm, so "
+                "the realm has to be given"
+            )
+            _derive_fqdn(result)
+            return
+
         result.mode = MODE_AUTO
         result.notes.append(
             "the server answered no unauthenticated policy query, so whether it is "
