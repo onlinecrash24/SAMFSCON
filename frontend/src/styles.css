@@ -1045,3 +1045,24 @@ fieldset[disabled] { opacity: 0.6; }
    the × that forgets a remembered server. */
 .link--quiet { color: var(--text-muted); }
 .link--quiet:hover { color: var(--text); }
+
+/* The SID under a resolved name. Small and quiet: it is there for the ACE
+   whose account was deleted, where the SID is the only thing left to search
+   for, and it should not compete with the name the rest of the time. */
+.perm__sid { display: block; margin-top: 1px; overflow-wrap: anywhere; }
+
+/* The descriptor as smbcacls prints it. Collapsed until a row shows something
+   unexpected, and then the only thing that answers why. */
+.perm__raw { margin: 4px 0 12px; }
+.perm__raw summary { cursor: pointer; color: var(--text-muted); font-size: 0.88em; }
+.perm__raw code {
+  display: block;
+  margin-top: 6px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-alt);
+  font-family: var(--mono);
+  font-size: 0.82em;
+  overflow-wrap: anywhere;
+}

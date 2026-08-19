@@ -84,6 +84,40 @@ PRESETS: tuple[tuple[str, int], ...] = (
     ("write", FILE_GENERIC_WRITE),
 )
 
+# SDDL writes the common trustees as two-letter aliases rather than as SIDs
+# (MS-DTYP 2.4.4.3). An editor that showed "WD" in the account column would be
+# showing the wire format to somebody who wants to know who may read a file.
+# Only the ones a file server's descriptors actually contain — the AD-specific
+# half of the table has no business here.
+SDDL_ALIASES: dict[str, str] = {
+    "WD": "S-1-1-0",  # Everyone
+    "AN": "S-1-5-7",  # Anonymous
+    "AU": "S-1-5-11",  # Authenticated Users
+    "IU": "S-1-5-4",  # Interactive
+    "NU": "S-1-5-2",  # Network
+    "SY": "S-1-5-18",  # Local System
+    "LS": "S-1-5-19",  # Local Service
+    "NS": "S-1-5-20",  # Network Service
+    "CO": "S-1-3-0",  # Creator Owner
+    "CG": "S-1-3-1",  # Creator Group
+    "OW": "S-1-3-4",  # Owner Rights
+    "BA": "S-1-5-32-544",  # Administrators
+    "BU": "S-1-5-32-545",  # Users
+    "BG": "S-1-5-32-546",  # Guests
+    "PU": "S-1-5-32-547",  # Power Users
+    "BO": "S-1-5-32-551",  # Backup Operators
+    "DA": None,  # Domain Admins — relative to the domain, resolved by the server
+    "DU": None,  # Domain Users
+    "DG": None,  # Domain Guests
+}
+
+# Samba's own mapping of Unix identities into the SID space (idmap, and the
+# `S-1-22` authority). No LSA lookup resolves these — they are not accounts the
+# server has, they are uids and gids wearing a SID — so they are named here or
+# they are named nowhere.
+UNIX_USER_PREFIX = "S-1-22-1-"
+UNIX_GROUP_PREFIX = "S-1-22-2-"
+
 # ACE flags (MS-DTYP 2.4.4.1), the inheritance half.
 OBJECT_INHERIT = 0x01
 CONTAINER_INHERIT = 0x02
@@ -112,6 +146,12 @@ class Ace:
     kind: str  # "allow" or "deny"
     mask: int
     flags: int
+    # The rights field exactly as the descriptor spelled it, and whether this
+    # parser understood all of it. A mask it could not read is shown as the text
+    # it came from — a confident 0x00000000 in a permissions dialog is a lie
+    # about who may do what.
+    raw_rights: str = ""
+    understood: bool = True
 
     @property
     def inherited(self) -> bool:
@@ -139,6 +179,8 @@ class Ace:
             "flags": self.flags,
             "inherited": self.inherited,
             "preset": self.preset,
+            "raw_rights": self.raw_rights,
+            "understood": self.understood,
             "rights": rights_of(self.mask),
             "applies_to": _applies_to(self.flags),
         }
@@ -217,11 +259,16 @@ def _parse_ace(text: str) -> Ace | None:
     trustee = parts[5].strip()
 
     kind = "deny" if ace_type.strip().upper().startswith("D") else "allow"
+    mask, understood = _parse_rights(rights_text)
+    if not understood:
+        logger.info("an ACE's rights field was not fully understood: %r", rights_text)
     return Ace(
         trustee=trustee,
         kind=kind,
-        mask=_parse_rights(rights_text),
+        mask=mask,
         flags=_parse_flags(flags_text),
+        raw_rights=rights_text.strip(),
+        understood=understood,
     )
 
 
@@ -251,26 +298,44 @@ _FLAG_LETTERS: tuple[tuple[str, int], ...] = (
 )
 
 
-def _parse_rights(text: str) -> int:
-    text = text.strip().upper()
-    if not text:
-        return 0
-    # A hexadecimal mask is the other legal form, and the one Samba emits for
-    # anything the letters cannot express exactly.
-    if text.startswith("0X"):
-        try:
-            return int(text, 16)
-        except ValueError:
-            return 0
+def _parse_rights(text: str) -> tuple[int, bool]:
+    """The mask a rights field carries, and whether it was fully understood.
 
+    Three forms are legal (MS-DTYP 2.5.1.1): a hexadecimal mask, a decimal one,
+    and a run of two-letter codes. The second flag is what stops a
+    half-recognised run of letters being reported as a confident number: a mask
+    assembled from the codes we knew and silently missing the ones we did not is
+    a permission that reads as narrower than it is, which is the direction that
+    gets somebody locked out.
+    """
+    raw = text.strip().upper()
+    if not raw:
+        return 0, True
+
+    if raw.startswith("0X"):
+        try:
+            return int(raw, 16), True
+        except ValueError:
+            return 0, False
+
+    # Samba writes hex, but the format allows a plain number and a descriptor
+    # that arrived from elsewhere may use one.
+    if raw.isdigit():
+        return int(raw), True
+
+    if len(raw) % 2:
+        return 0, False
+
+    known = dict(_RIGHT_LETTERS)
     mask = 0
-    for index in range(0, len(text) - 1, 2):
-        pair = text[index : index + 2]
-        for letter, value in _RIGHT_LETTERS:
-            if pair == letter:
-                mask |= value
-                break
-    return mask
+    understood = True
+    for index in range(0, len(raw), 2):
+        value = known.get(raw[index : index + 2])
+        if value is None:
+            understood = False
+            continue
+        mask |= value
+    return mask, understood
 
 
 def _parse_flags(text: str) -> int:
@@ -333,7 +398,12 @@ def build(descriptor: SecurityDescriptor) -> str:
         if ace.inherited:
             continue
         letter = "D" if ace.kind == "deny" else "A"
-        dacl += f"({letter};{render_flags(ace.flags)};{render_rights(ace.mask)};;;{ace.trustee})"
+        # An entry this parser could not read is written back exactly as it
+        # arrived. Re-rendering it from a mask we admit is incomplete would
+        # quietly rewrite somebody's permission on the way through an editor
+        # that was only ever opened to look at a different row.
+        rights = ace.raw_rights if not ace.understood else render_rights(ace.mask)
+        dacl += f"({letter};{render_flags(ace.flags)};{rights};;;{ace.trustee})"
 
     parts.append(dacl)
     return "".join(parts)
@@ -419,6 +489,34 @@ def _applies_to(flags: int) -> str:
     if container_inherit:
         return "folders"
     return "files"
+
+
+def canonical_sid(trustee: str) -> str | None:
+    """The SID behind a trustee string, when one can be had without asking.
+
+    Returns None for an alias that only means something relative to a domain
+    (``DA`` is whichever domain this server belongs to), which is exactly the
+    case worth handing to the server rather than guessing at.
+    """
+    text = trustee.strip()
+    if text.upper().startswith("S-"):
+        return text
+    return SDDL_ALIASES.get(text.upper())
+
+
+def unix_identity(sid: str) -> dict[str, Any] | None:
+    """Name a Samba Unix-mapped SID, which no lookup will resolve.
+
+    ``S-1-22-1-1000`` is uid 1000 and ``S-1-22-2-100`` is gid 100. They appear
+    in the descriptors of a share backed by POSIX ACLs, they are not accounts
+    the server knows by name, and left alone they show as a raw SID in a column
+    headed "account".
+    """
+    if sid.startswith(UNIX_USER_PREFIX):
+        return {"kind": "unix_user", "id": sid[len(UNIX_USER_PREFIX) :]}
+    if sid.startswith(UNIX_GROUP_PREFIX):
+        return {"kind": "unix_group", "id": sid[len(UNIX_GROUP_PREFIX) :]}
+    return None
 
 
 def preset_mask(name: str) -> int:

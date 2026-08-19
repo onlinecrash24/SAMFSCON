@@ -22,7 +22,7 @@ from fastapi import APIRouter
 from samfscon.api.common import Audit, PathQuery, ShareQuery
 from samfscon.auth.deps import CurrentSession, VerifiedSession, VerifiedWorker, Worker
 from samfscon.schemas.requests import SecurityDescriptorRequest
-from samfscon.srv import acl, files, shareacl
+from samfscon.srv import acl, files, identity, shareacl
 from samfscon.srv.access import srv_read, srv_write
 from samfscon.srv.connection import ServerConnection
 
@@ -43,7 +43,12 @@ async def get_share_permissions(
 
     def _read(conn: ServerConnection) -> dict[str, Any]:
         descriptor = shareacl.read(conn, share)
-        return {"share": share, "level": "share", **descriptor.describe()}
+        return {
+            "share": share,
+            "level": "share",
+            **descriptor.describe(),
+            "trustees": _resolve_trustees(conn, descriptor),
+        }
 
     return await srv_read(worker, session, _read, label="permissions.share")
 
@@ -85,7 +90,13 @@ async def get_path_permissions(
         relative = files.normalise(path)
         sddl = acl.read_path_sddl(conn, share, relative)
         descriptor = acl.parse(sddl)
-        return {"share": share, "path": relative, "level": "file", **descriptor.describe()}
+        return {
+            "share": share,
+            "path": relative,
+            "level": "file",
+            **descriptor.describe(),
+            "trustees": _resolve_trustees(conn, descriptor),
+        }
 
     return await srv_read(worker, session, _read, label="permissions.path")
 
@@ -166,6 +177,64 @@ async def effective(
         return result
 
     return await srv_read(worker, session, _read, label="permissions.effective")
+
+
+def _resolve_trustees(
+    conn: ServerConnection, descriptor: acl.SecurityDescriptor
+) -> dict[str, Any]:
+    """Names for every trustee in the descriptor, keyed by what the ACE said.
+
+    Resolved here rather than in the editor: one call for the whole descriptor
+    instead of one per row, against the LSA pipe this connection already holds.
+    A descriptor of nine entries was making nine round trips' worth of work look
+    reasonable right up until somebody opened one with ninety.
+
+    Three sources, and the order matters. An SDDL alias is expanded first,
+    because ``WD`` is a spelling of a SID rather than a name to look up. A Unix
+    mapping is named locally, because no lookup will ever resolve one. Whatever
+    is left is a real SID and goes to the server.
+
+    Never raises. A descriptor whose names could not be fetched is still a
+    descriptor worth showing — with the SIDs it had, which is what it showed
+    before this function existed.
+    """
+    from samfscon.core.errors import SamfsconError
+
+    trustees: dict[str, Any] = {}
+    to_look_up: dict[str, str] = {}  # sid -> the trustee string that produced it
+
+    for entry in descriptor.aces:
+        if entry.trustee in trustees or entry.trustee in to_look_up.values():
+            continue
+
+        sid = acl.canonical_sid(entry.trustee)
+        if sid is None:
+            # An alias that only means something relative to a domain. The
+            # server knows which domain that is; we do not.
+            trustees[entry.trustee] = {"sid": None, "name": None, "alias": entry.trustee}
+            continue
+
+        unix = acl.unix_identity(sid)
+        if unix is not None:
+            trustees[entry.trustee] = {"sid": sid, "name": None, "unix": unix}
+            continue
+
+        to_look_up[sid] = entry.trustee
+
+    if to_look_up:
+        try:
+            for found in identity.lookup_sids(conn, list(to_look_up)):
+                sid = found.get("sid")
+                if sid in to_look_up:
+                    trustees[to_look_up[sid]] = found
+        except SamfsconError:
+            # The names are decoration on a descriptor that is already correct.
+            pass
+
+    for sid, trustee in to_look_up.items():
+        trustees.setdefault(trustee, {"sid": sid, "name": None, "resolved": False})
+
+    return trustees
 
 
 def _mask_for(descriptor: acl.SecurityDescriptor, sid: str) -> int:

@@ -21,7 +21,13 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useState } from 'react'
 
 import { api } from '../../api/endpoints'
-import type { Ace, PermissionLevel, SecurityDescriptor, Trustee } from '../../api/types'
+import type {
+  Ace,
+  PermissionLevel,
+  ResolvedTrustee,
+  SecurityDescriptor,
+  Trustee,
+} from '../../api/types'
 import type { MessageKey } from '../../i18n/messages'
 import { Badge, ErrorMessage, Spinner } from '../../components/primitives'
 import { useI18n } from '../../i18n'
@@ -117,8 +123,12 @@ export function PermissionEditor({
                   onClick={() => setInspect(ace.trustee)}
                   title={t('perm.inspect')}
                 >
-                  {ace.trustee}
+                  {trusteeLabel(t, ace.trustee, descriptor.data.trustees[ace.trustee])}
                 </button>
+                {/* The SID under the name. An ACE naming an account that has
+                    since been deleted resolves to nothing, and then the SID is
+                    the only thing left to search for. */}
+                <span className="perm__sid mono muted small">{ace.trustee}</span>
               </td>
               <td>
                 <Badge tone={ace.kind === 'deny' ? 'danger' : 'ok'}>
@@ -128,7 +138,10 @@ export function PermissionEditor({
               <td>
                 <select
                   value={ace.preset ?? ''}
-                  disabled={!editable || ace.inherited}
+                  // An entry whose rights this parser could not read is not one
+                  // to offer a replacement for: picking a level would rewrite it
+                  // from a mask we have already admitted is incomplete.
+                  disabled={!editable || ace.inherited || !ace.understood}
                   onChange={(event) =>
                     setAces((current) =>
                       current.map((entry, position) =>
@@ -141,9 +154,16 @@ export function PermissionEditor({
                 >
                   {/* A mask that sits on no named rung keeps its exact value,
                       shown as hexadecimal rather than rounded to the nearest
-                      preset — rounding it would change the permission. */}
+                      preset — rounding it would change the permission. An
+                      entry the parser could not fully read shows the text the
+                      descriptor actually carried: a confident 0x00000000 in a
+                      permissions dialog is a lie about who may do what. */}
                   {ace.preset === null && (
-                    <option value="">{`0x${ace.mask.toString(16).padStart(8, '0')}`}</option>
+                    <option value="">
+                      {ace.understood
+                        ? `0x${ace.mask.toString(16).padStart(8, '0')}`
+                        : ace.raw_rights}
+                    </option>
                   )}
                   {PRESETS.map((preset) => (
                     <option key={preset} value={preset}>
@@ -200,6 +220,14 @@ export function PermissionEditor({
         </section>
       )}
 
+      {/* The descriptor as smbcacls prints it. Collapsed, because nobody wants
+          it until a row shows something they did not expect — and then it is
+          the only thing that answers why. */}
+      <details className="perm__raw">
+        <summary>{t('perm.raw')}</summary>
+        <code>{descriptor.data.sddl}</code>
+      </details>
+
       {level === 'file' && (
         <label className="checkbox">
           <input
@@ -238,6 +266,17 @@ export function PermissionEditor({
           onPick={(trustee: Trustee) => {
             setAdding(false)
             if (!trustee.sid) return
+            // The new row's trustee is its SID, and the name for it is not in
+            // the descriptor's map until the next fetch. Seeding it keeps the
+            // row from appearing as a bare SID for a second.
+            if (descriptor.data) {
+              descriptor.data.trustees[trustee.sid] = {
+                sid: trustee.sid,
+                name: trustee.name,
+                domain: trustee.domain,
+                type: trustee.type,
+              }
+            }
             setAces((current) => [
               ...current,
               {
@@ -249,6 +288,10 @@ export function PermissionEditor({
                 preset: 'read_execute',
                 rights: [],
                 applies_to: 'this_and_children',
+                // A row typed here was never parsed from a descriptor, so
+                // there is nothing it could have failed to understand.
+                raw_rights: '',
+                understood: true,
               },
             ])
           }}
@@ -301,6 +344,30 @@ const PRESET_LETTERS: Record<string, string> = {
   read_execute: '0x001200a9',
   read: 'FR',
   write: 'FW',
+}
+
+/**
+ * A trustee, as a person would name it.
+ *
+ * Falls back through everything it knows before giving up: the resolved name,
+ * then a Unix uid or gid named for what it is, then the alias, then the raw
+ * string. The last of those is what the whole column used to show.
+ */
+function trusteeLabel(
+  t: (key: MessageKey, params?: Record<string, string | number>) => string,
+  trustee: string,
+  resolved: ResolvedTrustee | undefined,
+): string {
+  if (resolved?.name) {
+    return resolved.domain ? `${resolved.domain}\\${resolved.name}` : resolved.name
+  }
+  if (resolved?.unix) {
+    const key =
+      resolved.unix.kind === 'unix_user' ? 'perm.unixUser' : 'perm.unixGroup'
+    return t(key, { id: resolved.unix.id })
+  }
+  if (resolved?.alias) return resolved.alias
+  return trustee
 }
 
 /**

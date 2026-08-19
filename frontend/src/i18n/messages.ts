@@ -231,6 +231,9 @@ export const de = {
     'Freigabeberechtigungen werden einmal geprüft, wenn ein Client die Freigabe öffnet, und begrenzen alles Weitere. Auf den meisten Samba-Servern steht hier „Jeder: Vollzugriff“, und die Dateiberechtigungen machen die eigentliche Arbeit.',
   'perm.file.what':
     'Dateiberechtigungen werden bei jedem Zugriff geprüft. Was tatsächlich erlaubt ist, ist die Schnittmenge aus diesen und den Freigabeberechtigungen.',
+  'perm.raw': 'Sicherheitsdeskriptor (SDDL)',
+  'perm.unixUser': 'Unix-Benutzer {id}',
+  'perm.unixGroup': 'Unix-Gruppe {id}',
   'perm.trustee': 'Konto',
   'perm.kind': 'Art',
   'perm.kind.allow': 'Erlauben',
@@ -675,6 +678,9 @@ export const en: Record<MessageKey, string> = {
     'Share permissions are checked once, when a client opens the share, and bound everything that follows. On most Samba servers this says Everyone: Full Control, and the file permissions do the real work.',
   'perm.file.what':
     'File permissions are checked on every access. What is actually permitted is the intersection of these and the share permissions.',
+  'perm.raw': 'Security descriptor (SDDL)',
+  'perm.unixUser': 'Unix user {id}',
+  'perm.unixGroup': 'Unix group {id}',
   'perm.trustee': 'Account',
   'perm.kind': 'Type',
   'perm.kind.allow': 'Allow',

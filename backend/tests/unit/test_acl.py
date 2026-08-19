@@ -200,3 +200,62 @@ def test_generic_and_specific_masks_intersect_correctly() -> None:
     generic = acl.effective_access(acl.GENERIC_ALL, acl.FILE_GENERIC_WRITE)
     specific = acl.effective_access(acl.FILE_ALL_ACCESS, acl.FILE_GENERIC_WRITE)
     assert generic["rights"] == specific["rights"]
+
+
+# ---------------------------------------------------------------------------
+# A mask nobody could read must not be reported as a confident zero
+#
+# A live share root showed four rows as "0x00000000" in the permission level
+# column — a number that says "this entry grants nothing", for entries that
+# plainly granted something. Whatever the rights field held, the parser did not
+# understand it and said so in the one way a reader would believe.
+# ---------------------------------------------------------------------------
+
+
+def test_a_decimal_mask_is_read() -> None:
+    """The format allows one, even though Samba writes hex."""
+    assert acl._parse_rights("2032127") == (0x001F01FF, True)
+
+
+def test_an_unknown_letter_pair_is_admitted_rather_than_hidden() -> None:
+    """Half a mask silently is the problem; half a mask *labelled* is not.
+
+    What was recognised is kept — it is strictly more than nothing, and the
+    effective-access calculation is already honest about being partial. What
+    must not happen is the entry being presented as understood, because then a
+    permission narrower than the real one reads as authoritative, and that is
+    the direction that locks somebody out.
+    """
+    mask, understood = acl._parse_rights("FRZZ")
+
+    assert understood is False
+    assert mask == acl.FILE_GENERIC_READ  # the half that was legible
+
+
+def test_an_odd_length_rights_field_is_not_guessed_at() -> None:
+    assert acl._parse_rights("FRF") == (0, False)
+
+
+def test_a_field_that_is_understood_says_so() -> None:
+    assert acl._parse_rights("FA") == (acl.FILE_ALL_ACCESS, True)
+    assert acl._parse_rights("0x001200a9") == (0x001200A9, True)
+    assert acl._parse_rights("") == (0, True)
+
+
+def test_an_unreadable_entry_is_written_back_exactly_as_it_arrived() -> None:
+    """The editor was opened to change a different row.
+
+    Re-rendering an entry from a mask the parser admits is incomplete would
+    rewrite a permission nobody touched, on the way through a save that was
+    about something else entirely.
+    """
+    descriptor = acl.parse("D:(A;;FRZZ;;;BA)(A;;FA;;;BU)")
+    unreadable, ordinary = descriptor.aces
+
+    assert unreadable.understood is False
+    assert unreadable.raw_rights == "FRZZ"
+    assert ordinary.understood is True
+
+    built = acl.build(descriptor)
+    assert "FRZZ" in built  # untouched
+    assert "FA" in built  # re-rendered from the mask, as normal

@@ -339,6 +339,10 @@ export interface Ace {
   inherited: boolean
   /** The named level this mask sits on, or null when it sits on none exactly. */
   preset: string | null
+  /** The rights field exactly as the descriptor spelled it. */
+  raw_rights: string
+  /** False when the parser could not read all of that field. */
+  understood: boolean
   rights: string[]
   applies_to:
     | 'this_only'
@@ -346,6 +350,26 @@ export interface Ace {
     | 'children_only'
     | 'folders'
     | 'files'
+}
+
+/**
+ * What a trustee string in an ACE actually refers to.
+ *
+ * Keyed by the string the ACE carried, because that is what the editor has in
+ * hand — an SDDL alias like `WD`, a Unix mapping like `S-1-22-2-0`, or a real
+ * SID. The server expands the first, names the second locally and looks the
+ * third up; any of them may come back unresolved, which is itself worth seeing.
+ */
+export interface ResolvedTrustee {
+  sid: string | null
+  name: string | null
+  domain?: string | null
+  type?: string
+  /** An alias that only means something relative to a domain, e.g. `DA`. */
+  alias?: string
+  /** Samba's mapping of a Unix uid or gid into the SID space. */
+  unix?: { kind: 'unix_user' | 'unix_group'; id: string }
+  resolved?: boolean
 }
 
 export interface SecurityDescriptor {
@@ -358,6 +382,7 @@ export interface SecurityDescriptor {
   /** True when the parent's entries no longer flow in. */
   protected: boolean
   aces: Ace[]
+  trustees: Record<string, ResolvedTrustee>
 }
 
 /**
