@@ -117,7 +117,14 @@ class ServerConnection:
         creds: Any,
         info: ServerInfo,
         transport: TransportState,
+        principal: str | None = None,
     ) -> None:
+        # Who this connection belongs to. Carried because the server does not
+        # always say: an LSA GetUserName that is refused leaves the account
+        # nameless, and then its privileges cannot be looked up either — which
+        # is reported as "could not be determined" for a question that was
+        # answerable from what we already knew.
+        self.principal = principal
         self.target = target
         self.settings = settings
         self.lp = lp
@@ -283,7 +290,15 @@ def connect(session: Any, settings: Settings) -> ServerConnection:
         "encrypted" if transport.encrypted else "signed",
     )
 
-    conn = ServerConnection(target, settings, lp, creds, info, transport)
+    conn = ServerConnection(
+        target,
+        settings,
+        lp,
+        creds,
+        info,
+        transport,
+        principal=getattr(session.principal, "username", None),
+    )
     conn._pipes[PIPE_SRVSVC] = srvsvc
     return conn
 

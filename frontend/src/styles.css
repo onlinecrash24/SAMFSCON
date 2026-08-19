@@ -302,19 +302,15 @@ button:focus-visible {
 
 .console__panes {
   display: grid;
-  /* The detail pane carries property sheets, permission tables and the
-     attribute editor — 380px left them cramped while the object list had room
-     to spare. The list keeps the elastic column; the panes beside it get
-     generous fixed bounds.
+  /* Two columns: the navigation and the working area. SAMADCON had three,
+     because its detail pane belongs to the shell. SAMFSCON's detail panes
+     belong to the views — a share's tabs, an account's dialog — so a third
+     shell column here was an empty strip down the right of every screen.
 
      Names in this block are the *shell's*. Anything else that wants a pair of
      panes needs its own prefix: a second `.console__panes` further down the
-     file silently turned this three-column grid into two, and the detail pane
-     wrapped onto a new row under the tree. */
-     SAMFSCON has two: the tree and the working area. Its detail panes belong
-     to the views (a share's tabs, an account's dialog) rather than to the
-     shell, so a third shell column would have been an empty strip down the
-     right of every screen — which is exactly what it was. */
+     file silently turned this grid into a different one, and the panes wrapped
+     onto rows under each other. */
   grid-template-columns: minmax(210px, 280px) 1fr;
   flex: 1;
   min-height: 0;
@@ -956,10 +952,13 @@ fieldset[disabled] { opacity: 0.6; }
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-/* The name takes what it needs, the path takes what is left, and neither
-   pushes the badges off the end. */
-.list--shares .list__name { flex: 0 0 auto; font-weight: 500; }
-.list--shares .list__meta { flex: 1 1 auto; min-width: 0; }
+/* A share row stacks: the name and its badges, then the path, then the
+   comment. Side by side they were four fields sharing 300px, which truncated
+   all four. */
+.list__lines { display: flex; flex-direction: column; gap: 1px; min-width: 0; flex: 1; }
+.list__line { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.list--shares .list__name { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.list--shares .list__meta { display: block; }
 
 /* Shares: a list beside the share that is open -------------------------- */
 

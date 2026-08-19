@@ -92,6 +92,17 @@ def current_account(conn: ServerConnection) -> dict[str, Any]:
         return account
 
     name, authority = _unpack_user_name(result)
+
+    if not name:
+        # The server would not say. We know anyway: this connection was opened
+        # by somebody, and the account domain came from the probe. Falling back
+        # to that is the difference between a capability report that explains
+        # itself and one that says "could not be determined".
+        name = getattr(conn, "principal", None)
+        authority = conn.target.netbios_name or conn.target.workgroup
+        if name:
+            account["from_session"] = True
+
     account["name"] = name
     account["authority"] = authority
 

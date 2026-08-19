@@ -18,7 +18,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 
 import { api } from '../../api/endpoints'
-import type { Share, ShareListing } from '../../api/types'
+import type { CapabilityNote, Share, ShareListing } from '../../api/types'
+import type { MessageKey } from '../../i18n/messages'
 import { Badge, Banner, ErrorMessage, Icon, Spinner } from '../../components/primitives'
 import { useI18n } from '../../i18n'
 import { NewShareDialog } from './NewShareDialog'
@@ -79,8 +80,8 @@ export function SharesView({ onChanged }: { onChanged: (message: string) => void
                     names: capabilities.disk_operators.join(', ') || '—',
                   })
                 : t('caps.unknownWhy'),
-            ...capabilities.notes,
-          ].join(' — ')}
+            ...capabilities.notes.map((note) => noteText(t, note)),
+          ].join(' ')}
           tone="warning"
         />
       )}
@@ -137,6 +138,22 @@ export function SharesView({ onChanged }: { onChanged: (message: string) => void
   )
 }
 
+/**
+ * A capability note, in the reader's language.
+ *
+ * An unknown code falls back to the code itself rather than to a blank: a note
+ * the server added before this catalogue caught up should still say *something*
+ * a person can search for.
+ */
+function noteText(
+  t: (key: MessageKey, params?: Record<string, string | number>) => string,
+  note: CapabilityNote,
+): string {
+  const key = `caps.note.${note.code}` as MessageKey
+  const text = t(key, note.params)
+  return text === key ? note.code : text
+}
+
 function ShareRow({
   share,
   selected,
@@ -156,12 +173,19 @@ function ShareRow({
         onClick={onSelect}
       >
         <Icon type="share" />
-        <span className="list__name">{share.name}</span>
-        <span className="list__meta mono muted small">{share.path ?? '—'}</span>
-        {share.comment && <span className="list__meta muted small">{share.comment}</span>}
-        {/* Not a warning — a fact about where this share is configured. */}
-        {!share.editable && <Badge tone="muted">{t('share.fromSmbConf')}</Badge>}
-        {share.current_users ? <Badge tone="ok">{share.current_users}</Badge> : null}
+        {/* Two lines. The column is 300px wide on a normal window, and a name,
+            a path, a comment and two badges competing for one of them left
+            every field truncated to uselessness. */}
+        <span className="list__lines">
+          <span className="list__line">
+            <span className="list__name">{share.name}</span>
+            {/* Not a warning — a fact about where this share is configured. */}
+            {!share.editable && <Badge tone="muted">{t('share.fromSmbConf')}</Badge>}
+            {share.current_users ? <Badge tone="ok">{share.current_users}</Badge> : null}
+          </span>
+          <span className="list__meta mono">{share.path ?? '—'}</span>
+          {share.comment && <span className="list__meta">{share.comment}</span>}
+        </span>
       </button>
     </li>
   )

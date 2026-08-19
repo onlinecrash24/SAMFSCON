@@ -22,11 +22,12 @@ naming the file and the person who had it.
 
 from __future__ import annotations
 
+import contextlib
 import logging
 from dataclasses import dataclass
 from typing import Any
 
-from samfscon.core.errors import NotFound, translate
+from samfscon.core.errors import NotFound, SamfsconError, translate
 from samfscon.srv.connection import ServerConnection
 
 logger = logging.getLogger(__name__)
@@ -119,18 +120,28 @@ def list_sessions(
 ) -> list[Session]:
     """Everyone currently connected.
 
-    Level 2 carries the idle time, which is the field that distinguishes "in
-    use" from "left open since Tuesday" — and that is the whole reason anyone
-    opens this view before closing something.
+    Level 1 first: it carries the user, the client, the open count, the
+    connected time and the idle time — every field this view shows. Level 2
+    adds only the client's type, which nobody has asked for, and a real server
+    refused it outright with WERR_INVALID_LEVEL. Level 0 is the floor and knows
+    the client and nothing else.
     """
     from samba.dcerpc import srvsvc
 
-    entries = _enumerate(
+    def make(level: int) -> Any:
+        return _ctr(
+            srvsvc.NetSessInfoCtr(),
+            level,
+            {0: srvsvc.NetSessCtr0, 1: srvsvc.NetSessCtr1, 2: srvsvc.NetSessCtr2}[level](),
+        )
+
+    entries, _ = _enumerate_levels(
         conn,
+        (1, 2, 0),
+        make,
         lambda pipe, ctr, resume: pipe.NetSessEnum(
             None, client, user, ctr, MAX_BUFFER, resume
         ),
-        lambda: _ctr(srvsvc.NetSessInfoCtr(), 2, srvsvc.NetSessCtr2()),
     )
     return [_session_from(entry) for entry in entries]
 
@@ -144,10 +155,18 @@ def list_connections(conn: ServerConnection, share: str) -> list[Connection]:
     """
     from samba.dcerpc import srvsvc
 
-    entries = _enumerate(
+    def make(level: int) -> Any:
+        return _ctr(
+            srvsvc.NetConnInfoCtr(),
+            level,
+            {0: srvsvc.NetConnCtr0, 1: srvsvc.NetConnCtr1}[level](),
+        )
+
+    entries, _ = _enumerate_levels(
         conn,
+        (1, 0),
+        make,
         lambda pipe, ctr, resume: pipe.NetConnEnum(None, share, ctr, MAX_BUFFER, resume),
-        lambda: _ctr(srvsvc.NetConnInfoCtr(), 1, srvsvc.NetConnCtr1()),
     )
     return [_connection_from(entry, share) for entry in entries]
 
@@ -157,18 +176,27 @@ def list_open_files(
 ) -> list[OpenFile]:
     """Every open handle, optionally narrowed to a path or a user.
 
-    Level 3 rather than 2, because level 2 carries only the handle id — and an
-    id on its own answers nothing. The path and the user are the two fields
-    that make this list worth showing.
+    Level 3 carries the path and the user, which are the two fields that make
+    this list worth showing at all. Level 2 knows only the handle id, and an id
+    on its own answers nothing — but a list of ids still beats an error box, so
+    it is the fallback rather than a refusal.
     """
     from samba.dcerpc import srvsvc
 
-    entries = _enumerate(
+    def make(level: int) -> Any:
+        return _ctr(
+            srvsvc.NetFileInfoCtr(),
+            level,
+            {2: srvsvc.NetFileCtr2, 3: srvsvc.NetFileCtr3}[level](),
+        )
+
+    entries, _ = _enumerate_levels(
         conn,
+        (3, 2),
+        make,
         lambda pipe, ctr, resume: pipe.NetFileEnum(
             None, path, user, ctr, MAX_BUFFER, resume
         ),
-        lambda: _ctr(srvsvc.NetFileInfoCtr(), 3, srvsvc.NetFileCtr3()),
     )
     return [_file_from(entry) for entry in entries]
 
@@ -216,9 +244,63 @@ def close_file(conn: ServerConnection, file_id: int) -> None:
 
 
 def _ctr(container: Any, level: int, inner: Any) -> Any:
+    """Fill in an info container for one level.
+
+    The union member has two spellings across Samba releases — assigned by name
+    (``ctr.ctr1``) or as a whole (``ctr = ...``) — and getting it wrong marshals
+    a container that does not match the level beside it. Both are tried, by
+    name first because that is the form Samba's own tests use.
+
+    The count and the array are set explicitly rather than left at whatever the
+    constructor produced: an unset array is not the same as an empty one to the
+    marshaller.
+    """
+    for field, value in (("count", 0), ("array", [])):
+        # A level that has no such field is not a problem to report.
+        with contextlib.suppress(AttributeError, TypeError):
+            setattr(inner, field, value)
+
     container.level = level
-    container.ctr = inner
+    try:
+        setattr(container.ctr, f"ctr{level}", inner)
+    except (AttributeError, TypeError):
+        container.ctr = inner
     return container
+
+
+def _enumerate_levels(
+    conn: ServerConnection, levels: tuple[int, ...], make_ctr: Any, call: Any
+) -> tuple[list[Any], int]:
+    """Ask at the most informative level the server actually supports.
+
+    A server that does not implement a level answers WERR_INVALID_LEVEL, and
+    treating that as a failure put a red box above an empty table — for a
+    question the server would have answered perfectly well one level down. It
+    is not an error, it is a negotiation, so it is negotiated: the levels are
+    tried in order and the first that answers wins. Fields the winning level
+    does not carry come back as None, which the interface already renders as a
+    dash.
+
+    Only WERR_INVALID_LEVEL moves to the next candidate. Access denied, or a
+    server that is simply gone, is the caller's to hear about.
+    """
+    last: SamfsconError | None = None
+
+    for level in levels:
+        try:
+            entries = _enumerate(conn, call, lambda level=level: make_ctr(level))
+        except SamfsconError as exc:
+            if exc.code != "unsupported_info_level":
+                raise
+            logger.info("the server declined information level %d; trying the next", level)
+            last = exc
+            continue
+        if level != levels[0]:
+            logger.info("using information level %d", level)
+        return entries, level
+
+    assert last is not None  # the loop cannot end without either a return or one
+    raise last
 
 
 def _enumerate(conn: ServerConnection, call: Any, make_ctr: Any) -> list[Any]:

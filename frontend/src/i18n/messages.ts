@@ -167,6 +167,19 @@ export const de = {
   'share.group.vfs': 'Module',
   'share.group.advanced': 'Erweitert',
 
+  'caps.note.registry_missing':
+    'Der Server hat keine erreichbare Registry-Konfiguration — „include = registry“ und „registry shares = yes“ in seiner smb.conf ergänzen.',
+  'caps.note.registry_unreadable':
+    'Die Registry-Konfiguration ist vorhanden, dieses Konto darf sie aber nicht lesen.',
+  'caps.note.registry_read_only':
+    'Dieses Konto darf die Registry-Konfiguration lesen, aber nicht ändern.',
+  'caps.note.registry_probe_failed': 'Die Registry-Konfiguration ließ sich nicht prüfen ({detail}).',
+  'caps.note.privilege_list_unreadable': 'Die Privilegienliste ließ sich nicht lesen ({reason}).',
+  'caps.note.sid_unknown':
+    'Die SID des angemeldeten Kontos ist unbekannt, darum ließen sich seine Privilegien nicht prüfen.',
+  'caps.note.disk_operators_are': 'SeDiskOperatorPrivilege halten: {names}.',
+  'caps.note.no_disk_operators':
+    'Auf diesem Server hält niemand SeDiskOperatorPrivilege — mit „net rpc rights grant“ vergeben.',
   'caps.noRegistryConfig':
     'Dieser Server ist nicht dafür eingerichtet, Freigaben über das Netz zu verwalten. In den Abschnitt [global] seiner smb.conf „include = registry“ und „registry shares = yes“ eintragen und Samba neu laden. Lesen funktioniert ohne das.',
   'caps.noDiskOperator':
@@ -601,6 +614,19 @@ export const en: Record<MessageKey, string> = {
   'share.group.vfs': 'Modules',
   'share.group.advanced': 'Advanced',
 
+  'caps.note.registry_missing':
+    'The server has no reachable registry configuration — add ‘include = registry’ and ‘registry shares = yes’ to its smb.conf.',
+  'caps.note.registry_unreadable':
+    'The registry configuration exists but this account may not read it.',
+  'caps.note.registry_read_only':
+    'This account may read the registry configuration but not change it.',
+  'caps.note.registry_probe_failed': 'The registry configuration could not be probed ({detail}).',
+  'caps.note.privilege_list_unreadable': 'The privilege list could not be read ({reason}).',
+  'caps.note.sid_unknown':
+    'The signed-in account’s SID is unknown, so its privileges could not be checked.',
+  'caps.note.disk_operators_are': 'SeDiskOperatorPrivilege is held by: {names}.',
+  'caps.note.no_disk_operators':
+    'Nobody on this server holds SeDiskOperatorPrivilege — grant it with ‘net rpc rights grant’.',
   'caps.noRegistryConfig':
     'This server is not set up for managing shares over the network. Add \u2018include = registry\u2019 and \u2018registry shares = yes\u2019 to the [global] section of its smb.conf and reload Samba. Reading works without it.',
   'caps.noDiskOperator':

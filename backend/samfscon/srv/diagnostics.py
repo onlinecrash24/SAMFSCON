@@ -43,6 +43,24 @@ KEY_WRITE = 0x00020006
 
 
 @dataclass
+class Note:
+    """One reason a capability could not be established, as a code.
+
+    A code rather than a sentence, because the interface is bilingual and the
+    server writes English. The first version of this carried prose, and a
+    German banner ended with "the signed-in account's SID is unknown" tacked on
+    the end of it — half a sentence in the wrong language, which is exactly the
+    half that explains what to do.
+    """
+
+    code: str
+    params: dict[str, Any] = field(default_factory=dict)
+
+    def describe(self) -> dict[str, Any]:
+        return {"code": self.code, "params": dict(self.params)}
+
+
+@dataclass
 class Capabilities:
     """What this session can actually do, as opposed to what it may attempt."""
 
@@ -53,7 +71,7 @@ class Capabilities:
     registry_writable: bool | None = None
     has_disk_operator: bool | None = None
     disk_operators: list[str] = field(default_factory=list)
-    notes: list[str] = field(default_factory=list)
+    notes: list[Note] = field(default_factory=list)
 
     @property
     def can_manage_shares(self) -> bool | None:
@@ -70,7 +88,7 @@ class Capabilities:
             "has_disk_operator": self.has_disk_operator,
             "disk_operators": list(self.disk_operators),
             "can_manage_shares": self.can_manage_shares,
-            "notes": list(self.notes),
+            "notes": [note.describe() for note in self.notes],
         }
 
 
@@ -120,19 +138,14 @@ def _check_registry(conn: ServerConnection, caps: Capabilities) -> None:
             # smb.conf that is already right.
             caps.registry_config = True
             caps.registry_writable = False
-            caps.notes.append(
-                "the registry configuration exists but this account may not read it"
-            )
+            caps.notes.append(Note("registry_unreadable"))
             return
         caps.registry_config = False
-        caps.notes.append(
-            "the server has no reachable registry configuration — add "
-            "'include = registry' and 'registry shares = yes' to its smb.conf"
-        )
+        caps.notes.append(Note("registry_missing"))
         return
     except Exception as exc:  # a probe must not break the console
         logger.debug("registry probe failed", exc_info=True)
-        caps.notes.append(f"the registry configuration could not be probed: {exc}")
+        caps.notes.append(Note("registry_probe_failed", {"detail": str(exc)}))
         return
 
     try:
@@ -140,7 +153,7 @@ def _check_registry(conn: ServerConnection, caps: Capabilities) -> None:
             caps.registry_writable = True
     except SamfsconError:
         caps.registry_writable = False
-        caps.notes.append("this account may read the registry configuration but not change it")
+        caps.notes.append(Note("registry_read_only"))
     except Exception:
         logger.debug("registry write probe failed", exc_info=True)
 
@@ -158,19 +171,17 @@ def _check_privilege(conn: ServerConnection, caps: Capabilities, sid: str | None
     try:
         holders = identity.accounts_with_right(conn, DISK_OPERATOR_RIGHT)
     except SamfsconError as exc:
-        caps.notes.append(f"the privilege list could not be read: {exc.message}")
+        caps.notes.append(Note("privilege_list_unreadable", {"reason": exc.message}))
         return
     except Exception as exc:
         logger.debug("privilege probe failed", exc_info=True)
-        caps.notes.append(f"the privilege list could not be read: {exc}")
+        caps.notes.append(Note("privilege_list_unreadable", {"reason": str(exc)}))
         return
 
     caps.disk_operators = [entry["name"] for entry in holders if entry.get("name")]
 
     if sid is None:
-        caps.notes.append(
-            "the signed-in account's SID is unknown, so its privileges could not be checked"
-        )
+        caps.notes.append(Note("sid_unknown"))
         return
 
     holder_sids = {entry.get("sid") for entry in holders}
@@ -192,13 +203,10 @@ def _check_privilege(conn: ServerConnection, caps: Capabilities, sid: str | None
     caps.has_disk_operator = False
     if caps.disk_operators:
         caps.notes.append(
-            "SeDiskOperatorPrivilege is held by: " + ", ".join(caps.disk_operators)
+            Note("disk_operators_are", {"names": ", ".join(caps.disk_operators)})
         )
     else:
-        caps.notes.append(
-            "nobody holds SeDiskOperatorPrivilege on this server — grant it with "
-            "net rpc rights grant '<group>' SeDiskOperatorPrivilege -U <admin>"
-        )
+        caps.notes.append(Note("no_disk_operators"))
 
 
 def require_share_management(caps: Capabilities) -> None:

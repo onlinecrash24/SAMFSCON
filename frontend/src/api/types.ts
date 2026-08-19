@@ -189,13 +189,25 @@ export interface AccountIdentity {
  * `null` means "could not look" — telling an administrator their permissions
  * are missing when the check itself was refused is worse than saying nothing.
  */
+/**
+ * One reason a capability could not be established.
+ *
+ * A code rather than a sentence: the server writes English and this interface
+ * is bilingual, so a note it composed itself would arrive half-translated in
+ * the middle of a German banner — which is what it used to do.
+ */
+export interface CapabilityNote {
+  code: string
+  params: Record<string, string>
+}
+
 export interface Capabilities {
   registry_config: boolean | null
   registry_writable: boolean | null
   has_disk_operator: boolean | null
   disk_operators: string[]
   can_manage_shares: boolean | null
-  notes: string[]
+  notes: CapabilityNote[]
 }
 
 export interface WhoAmI {
