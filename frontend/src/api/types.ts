@@ -206,7 +206,14 @@ export interface Capabilities {
   registry_writable: boolean | null
   has_disk_operator: boolean | null
   disk_operators: string[]
+  /** Creating, changing and deleting shares — a registry write. */
   can_manage_shares: boolean | null
+  /**
+   * Writing a share's own descriptor. A different question: it has no registry
+   * equivalent, goes through srvsvc level 1501, and really does come down to
+   * SeDiskOperatorPrivilege.
+   */
+  can_manage_share_permissions: boolean | null
   notes: CapabilityNote[]
 }
 

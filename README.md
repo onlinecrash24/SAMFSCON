@@ -65,25 +65,34 @@ additionally requires SMB3 encryption, where the server offers it.
 Reading works against any Samba file server with no preparation at all: shares, their options,
 sessions, open files, permissions and local accounts.
 
-**Changing** a share needs two things on the server, and they are the same two the Windows
-Computer Management console needs against Samba. In the `[global]` section of its `smb.conf`:
+**Changing** a share needs one thing, in the `[global]` section of the server's `smb.conf`:
 
 ```
     include = registry
     registry shares = yes
 ```
 
-and the right that `srvsvc` checks before it will touch a share:
+That is genuinely all. A share is a key under `HKLM\Software\Samba\smbconf` with a `path` value,
+SAMFSCON writes it over `winreg`, and Samba loads registry shares on demand. It is the same thing
+`net rpc conf addshare` does.
+
+**Not** `SeDiskOperatorPrivilege`, and not an `add share command` — which is worth saying because
+the obvious route needs both. `srvsvc`'s own `NetShareAdd` refuses with `WERR_ACCESS_DENIED` unless
+smb.conf sets an `add share command`, and it refuses that way no matter what privileges the caller
+holds; registry shares get no exemption. That command exists to run a script that rewrites the text
+smb.conf, which is not a thing this console has any business asking a server to do. So it takes the
+registry route instead, and the prerequisite disappears.
+
+The privilege is still needed for **share permissions**. Those live in `share_info.tdb`, have no
+registry equivalent, and go through `srvsvc` level 1501, which does check it:
 
 ```bash
 net rpc rights grant 'DOMAIN\Domain Admins' SeDiskOperatorPrivilege -U administrator
 ```
 
-SAMFSCON **detects both** and says which one is missing, with the command that fixes it. It does
-not fail obscurely: the share list, the permissions and the sessions are all there, and only the
-writes that need the preparation are refused. Both are the same `WERR_ACCESS_DENIED` on the wire,
-which is exactly why the console checks them separately — the advice for one sends you entirely
-the wrong way for the other.
+SAMFSCON checks both and reports them separately, because they gate different things. Reading needs
+neither: the share list, the options, the permissions and the sessions are all there without any of
+it, and only the writes that need a prerequisite are refused.
 
 `samfsconctl check --user administrator` answers the same question from a shell.
 

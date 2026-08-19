@@ -22,11 +22,12 @@ server whose configuration says two different things.
 
 from __future__ import annotations
 
+import contextlib
 import logging
 from dataclasses import dataclass, field
 from typing import Any
 
-from samfscon.core.errors import Conflict, InvalidRequest, NotFound, SamfsconError, translate
+from samfscon.core.errors import Conflict, InvalidRequest, NotFound, translate
 from samfscon.srv import registry, shareconf
 from samfscon.srv.connection import ServerConnection
 
@@ -165,16 +166,24 @@ def create_share(
     comment: str | None = None,
     options: dict[str, str | None] | None = None,
 ) -> dict[str, Any]:
-    """Create a share, then apply its options.
+    """Create a share by writing it into the registry configuration.
 
-    Two steps against two interfaces, and the order matters: srvsvc creates the
-    section, and the options are written into the key it made. Doing it the
-    other way round leaves a configured key with no share attached, which
-    ``net conf`` shows and Samba ignores.
+    Not through ``NetShareAdd``, and that is the whole point. Samba's
+    implementation of that call requires an ``add share command`` in smb.conf —
+    unconditionally, with no exemption for registry shares — and refuses with
+    WERR_ACCESS_DENIED when there is none. It exists to run a script that edits
+    the text smb.conf, which is a thing this console has no business asking a
+    server to do.
 
-    If the second step fails the first is rolled back. A share that exists with
-    none of the access restrictions it was created with is worse than no share
-    at all — it is a share that is open to everyone for as long as nobody looks.
+    The registry needs none of it. A share *is* a key under
+    ``HKLM\\Software\\Samba\\smbconf`` with a ``path`` value, which is exactly
+    what ``net rpc conf addshare`` writes and exactly what this connection's
+    winreg pipe is already open for. Samba loads registry shares on demand, so
+    the share exists as soon as the key does.
+
+    Everything is written in one go: a key with a path but no options would be a
+    share that exists for a moment with none of the access restrictions it was
+    created with — open to whoever looks in that moment.
     """
     _reject_administrative(name)
     checked = shareconf.validate(options or {})
@@ -186,19 +195,21 @@ def create_share(
             context={"share": name},
         )
 
-    _add(conn, name=name, path=path, comment=comment)
+    values: dict[str, str | None] = {"path": path}
+    if comment:
+        values["comment"] = comment
+    values.update(checked)
 
     try:
-        applied = registry.write_options(conn, name, checked) if checked else {}
+        applied = registry.write_options(conn, name, values)
     except Exception as exc:
-        logger.warning("options for the new share %s failed; removing it again", name)
-        try:
-            _delete(conn, name)
-        except Exception:  # noqa: BLE001 — the original failure is the one to report
-            logger.error(
-                "could not roll back the share %s — it exists without its options", name
-            )
-        raise translate(exc) from exc
+        error = translate(exc)
+        logger.warning("creating the share %s failed: %s", name, error.message)
+        # A key that got half-written is a share Samba may already be serving.
+        # Take it back rather than leave one behind that nobody meant to make.
+        with contextlib.suppress(Exception):
+            registry.delete_section(conn, name)
+        raise error from exc
 
     logger.info("share created: %s -> %s", name, path)
     return {"name": name, "path": path, "comment": comment, "options": applied}
@@ -213,6 +224,10 @@ def update_share(
     options: dict[str, str | None] | None = None,
 ) -> dict[str, Any]:
     """Change a share. Only what was sent is changed.
+
+    The path and the comment are registry values like everything else — they
+    have their own fields in the interface because every console puts them on
+    the first tab, not because the protocol treats them differently.
 
     Returns the applied changes with their previous values, for the audit log.
     """
@@ -233,37 +248,29 @@ def update_share(
             context={"share": name},
         )
 
-    changes: dict[str, Any] = {}
+    values: dict[str, str | None] = dict(checked)
+    if path is not None and path != current.path:
+        values["path"] = path
+    if comment is not None and comment != (current.comment or ""):
+        values["comment"] = comment
 
-    if (path is not None and path != current.path) or (
-        comment is not None and comment != current.comment
-    ):
-        _set_info(
-            conn,
-            name,
-            path=path if path is not None else current.path,
-            comment=comment if comment is not None else current.comment,
-            max_users=current.max_users,
-        )
-        if path is not None and path != current.path:
-            changes["path"] = {"old": current.path, "new": path}
-        if comment is not None and comment != current.comment:
-            changes["comment"] = {"old": current.comment, "new": comment}
-
-    if checked:
-        applied = registry.write_options(conn, name, checked)
-        changes.update(applied)
-
-    return changes
+    if not values:
+        return {}
+    return registry.write_options(conn, name, values)
 
 
 def delete_share(conn: ServerConnection, name: str) -> None:
-    """Remove a share and the configuration that belongs to it.
+    """Remove a share by removing its registry key.
 
-    Both halves, in that order. Leaving the registry key behind would mean the
-    next share created under the same name silently inherits the old one's
-    access restrictions — which is the kind of surprise that gets blamed on
-    everything except the right thing.
+    The counterpart of the creation, and for the same reason: ``NetShareDel``
+    wants a ``delete share command`` on the server. Deleting the key removes the
+    share and its configuration together, which is what leaving one behind used
+    to risk — the next share created under the same name inheriting the old
+    one's access restrictions.
+
+    The directory on the server is left alone. Deleting a share is a
+    configuration change; deleting the data behind it is not something a console
+    should do as a side effect of one.
     """
     _reject_administrative(name)
 
@@ -274,13 +281,7 @@ def delete_share(conn: ServerConnection, name: str) -> None:
             context={"share": name},
         )
 
-    _delete(conn, name)
-    try:
-        registry.delete_section(conn, name)
-    except Exception:  # noqa: BLE001 — the share is gone; the leftover key is not fatal
-        logger.warning(
-            "the share %s was removed but its configuration key could not be", name
-        )
+    registry.delete_section(conn, name)
     logger.info("share deleted: %s", name)
 
 
@@ -417,117 +418,6 @@ def _exists(conn: ServerConnection, name: str) -> bool:
         # proceed and fail again, less clearly, one call later.
         raise error from exc
     return True
-
-
-def _add(conn: ServerConnection, *, name: str, path: str, comment: str | None) -> None:
-    from samba.dcerpc import srvsvc
-
-    pipe = conn.srvsvc
-    info = srvsvc.NetShareInfo2()
-    info.name = name
-    info.type = STYPE_DISKTREE
-    info.comment = comment or ""
-    info.permissions = 0
-    # 0xFFFFFFFF is "unlimited". Zero would mean nobody may connect, which is a
-    # share that exists and refuses everyone — the least useful default there is.
-    info.max_users = 0xFFFFFFFF
-    info.current_users = 0
-    info.path = path
-    info.password = None
-
-    wrapped = share_info(2, info)
-    try:
-        _attempt(
-            lambda: pipe.NetShareAdd(None, 2, wrapped, 0),
-            lambda: pipe.NetShareAdd(None, 2, wrapped, None),
-            # A build that takes the struct itself. Last, because getting this
-            # wrong is silent: it reaches the server and is refused there.
-            lambda: pipe.NetShareAdd(None, 2, info, 0),
-        )
-    except Exception as exc:
-        raise _add_failure(exc, name) from exc
-
-
-def _add_failure(exc: Exception, name: str) -> SamfsconError:
-    """Turn a refused creation into something that points somewhere useful.
-
-    A name is checked against the characters SMB forbids before the request
-    leaves (see samfscon.schemas.requests). So when the server answers
-    WERR_INVALID_NAME anyway, the two disagree — and the one that is more
-    likely wrong is the request, not the name. Samba returns that status when
-    the share name reaches it *empty*, which is what a malformed structure
-    produces.
-
-    Saying "the name is not valid" there sends the reader to rename a share
-    called "test", which is exactly where it sent one.
-    """
-    error = translate(exc)
-    if error.code != "invalid_name":
-        return error
-
-    return InvalidRequest(
-        "The server rejected the request to create this share.",
-        code="share_add_rejected",
-        hint=(
-            "The name passed SAMFSCON's own check, so the server is objecting "
-            "to the request rather than to the name — most likely it reached "
-            "the server empty. This is a fault in SAMFSCON, not in what was "
-            "typed. The container log has the detail."
-        ),
-        detail=error.detail or error.message,
-        context={"share": name},
-    )
-
-
-def _set_info(
-    conn: ServerConnection,
-    name: str,
-    *,
-    path: str | None,
-    comment: str | None,
-    max_users: int | None,
-) -> None:
-    """Write the fields srvsvc owns, leaving the rest of the share alone.
-
-    NetShareSetInfo replaces the whole info structure — there is no partial
-    form of it — so every field has to be sent, including the ones this call is
-    not changing. `max_users` is the one that matters: Samba maps it onto the
-    `max connections` option, and sending "unlimited" here on a comment change
-    would quietly delete a connection limit somebody set on purpose.
-    """
-    from samba.dcerpc import srvsvc
-
-    pipe = conn.srvsvc
-    info = srvsvc.NetShareInfo2()
-    info.name = name
-    info.type = STYPE_DISKTREE
-    info.comment = comment or ""
-    info.permissions = 0
-    info.max_users = 0xFFFFFFFF if max_users is None else max_users
-    info.current_users = 0
-    info.path = path or ""
-    info.password = None
-
-    wrapped = share_info(2, info)
-    try:
-        _attempt(
-            lambda: pipe.NetShareSetInfo(None, name, 2, wrapped, 0),
-            lambda: pipe.NetShareSetInfo(None, name, 2, wrapped, None),
-            lambda: pipe.NetShareSetInfo(None, name, 2, info, 0),
-        )
-    except Exception as exc:
-        raise translate(exc) from exc
-
-
-def _delete(conn: ServerConnection, name: str) -> None:
-    pipe = conn.srvsvc
-    try:
-        _attempt(
-            lambda: pipe.NetShareDel(None, name, 0),
-            lambda: pipe.NetShareDel(None, name),
-        )
-    except Exception as exc:
-        raise translate(exc) from exc
 
 
 def _registry_sections(conn: ServerConnection) -> set[str] | None:

@@ -445,6 +445,9 @@ export const de = {
   'error.missing_disk_operator.hint':
     'Der Server prüft dafür SeDiskOperatorPrivilege. Vergeben mit: net rpc rights grant \'<Gruppe>\' SeDiskOperatorPrivilege -U <Admin>',
   'error.not_configured': 'Der Server ist dafür nicht eingerichtet.',
+  'error.registry_not_writable': 'Ihr Konto darf die Konfiguration dieses Servers nicht ändern.',
+  'error.registry_not_writable.hint':
+    'Freigaben werden in die Registry-Konfiguration unter HKLM\Software\Samba\smbconf geschrieben; dieses Konto darf sie lesen, aber nicht ändern.',
   'error.registry_config_missing':
     'Dieser Server ist nicht dafür eingerichtet, Freigaben über das Netz zu verwalten.',
   'error.registry_config_missing.hint':
@@ -908,6 +911,9 @@ export const en: Record<MessageKey, string> = {
   'error.missing_disk_operator.hint':
     'The server checks SeDiskOperatorPrivilege for this. Grant it with: net rpc rights grant \'<group>\' SeDiskOperatorPrivilege -U <admin>',
   'error.not_configured': 'The server is not set up for this.',
+  'error.registry_not_writable': 'Your account may not change this server’s configuration.',
+  'error.registry_not_writable.hint':
+    'Shares are written into the registry configuration under HKLM\Software\Samba\smbconf, and this account may read it but not change it.',
   'error.registry_config_missing':
     'This server is not set up for managing shares over the network.',
   'error.registry_config_missing.hint':

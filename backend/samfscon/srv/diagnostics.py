@@ -75,11 +75,33 @@ class Capabilities:
 
     @property
     def can_manage_shares(self) -> bool | None:
-        if self.registry_config is False or self.has_disk_operator is False:
+        r"""Whether shares can be created, changed and removed here.
+
+        This asks about the **registry**, not about SeDiskOperatorPrivilege, and
+        the difference was worth a round of testing to learn. Shares are written
+        by putting a key under HKLM\Software\Samba\smbconf, which needs write
+        access to that key and nothing else. The privilege gates srvsvc's own
+        NetShareAdd — a call that additionally requires an `add share command`
+        in smb.conf and that this console no longer makes.
+
+        The privilege still matters for share *permissions*, which have no
+        registry equivalent and go through srvsvc level 1501. That is a
+        different question and gets a different field.
+        """
+        if self.registry_config is False or self.registry_writable is False:
             return False
-        if self.registry_config and self.has_disk_operator:
+        if self.registry_config and self.registry_writable:
             return True
         return None
+
+    @property
+    def can_manage_share_permissions(self) -> bool | None:
+        """Whether the share-level descriptor can be written.
+
+        srvsvc level 1501, which is the only route there is for it — so this
+        one really does come down to SeDiskOperatorPrivilege.
+        """
+        return self.has_disk_operator
 
     def describe(self) -> dict[str, Any]:
         return {
@@ -88,6 +110,7 @@ class Capabilities:
             "has_disk_operator": self.has_disk_operator,
             "disk_operators": list(self.disk_operators),
             "can_manage_shares": self.can_manage_shares,
+            "can_manage_share_permissions": self.can_manage_share_permissions,
             "notes": [note.describe() for note in self.notes],
         }
 
@@ -295,22 +318,23 @@ def require_share_management(caps: Capabilities) -> None:
                 "Reading works without it; only changes need it."
             ),
         )
-    # Only a confirmed absence. `None` means this check could not resolve the
-    # nested group membership that decides it — and the server evaluates the
-    # whole token anyway, so the attempt goes through and its answer stands.
-    # Refusing here on an unconfirmed guess is how a domain administrator was
-    # told they could not do something they can.
-    if caps.has_disk_operator is False:
+    if caps.registry_writable is False:
         raise PermissionDenied(
-            "Nobody on this server may manage its shares.",
-            code="missing_disk_operator",
+            "Your account may not change this server's configuration.",
+            code="registry_not_writable",
             hint=(
-                "The server checks SeDiskOperatorPrivilege for this, and no "
-                "account or group holds it. Grant it on the server with: "
-                + _grant_command_from(caps)
+                "Shares are written into the registry configuration under "
+                r"HKLM\Software\Samba\smbconf, and this account may read it "
+                "but not change it."
             ),
-            context={"holders": caps.disk_operators},
         )
+
+    # SeDiskOperatorPrivilege is deliberately not checked here any more. It
+    # gates srvsvc's NetShareAdd, which this console stopped calling: that
+    # implementation also requires an `add share command` in smb.conf and
+    # refuses without one, whatever privileges the caller holds. Writing the
+    # registry key needs neither. The privilege still gates share *permissions*,
+    # and that path checks it for itself.
 
 
 def _grant_command_from(caps: Capabilities) -> str:

@@ -458,16 +458,16 @@ CATALOGUE: tuple[Option, ...] = (
 
 BY_NAME: dict[str, Option] = {option.name: option for option in CATALOGUE}
 
-# The options srvsvc already carries in its own fields. Written through
-# NetShareSetInfo rather than the registry, so the interface must not offer
-# them twice — two routes to one value is two routes that can disagree.
-#
-# `max connections` is deliberately NOT here even though NetShareInfo2 has a
-# max_users field. Samba maps that field onto this option, so it is one value
-# with two spellings rather than two values; the registry is the route this
-# console takes, and the srvsvc write preserves whatever is there rather than
-# resetting it (see samfscon.srv.shares._set_info).
-SRVSVC_OWNED = frozenset({"path", "comment"})
+# Options the interface gives their own field, on the first tab, because every
+# console does. They are ordinary registry values like all the others — this
+# set exists so the generic option list does not show them a second time, not
+# because anything else writes them.
+SHOWN_SEPARATELY = frozenset({"path", "comment"})
+
+# Kept under its old name for the validator, which still refuses them as
+# free-form options: they have a route through the interface already, and two
+# routes to one value is two routes that can disagree.
+SRVSVC_OWNED = SHOWN_SEPARATELY
 
 
 @dataclass

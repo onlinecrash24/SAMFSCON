@@ -66,25 +66,36 @@ Beide Verbindungen sind **signiert und mindestens SMB3**. SMB1 wird nicht verhan
 Lesen funktioniert ohne jede Vorbereitung gegen jeden Samba-Fileserver: Freigaben, ihre Optionen,
 Sitzungen, offene Dateien, Berechtigungen und lokale Konten.
 
-**Ändern** einer Freigabe braucht zwei Dinge auf dem Server — dieselben zwei, die auch die
-Windows-Computerverwaltung gegen Samba braucht. Im Abschnitt `[global]` seiner `smb.conf`:
+**Ändern** einer Freigabe braucht eine einzige Sache, im Abschnitt `[global]` der `smb.conf` des
+Servers:
 
 ```
     include = registry
     registry shares = yes
 ```
 
-und das Recht, das `srvsvc` prüft, bevor es eine Freigabe anfasst:
+Mehr wirklich nicht. Eine Freigabe ist ein Schlüssel unter `HKLM\Software\Samba\smbconf` mit
+einem `path`-Wert; SAMFSCON schreibt ihn über `winreg`, und Samba lädt Registry-Freigaben bei
+Bedarf. Genau das tut auch `net rpc conf addshare`.
+
+**Nicht** `SeDiskOperatorPrivilege`, und **kein** `add share command` — was der Erwähnung wert ist,
+weil der naheliegende Weg beides braucht. Sambas eigenes `NetShareAdd` lehnt mit
+`WERR_ACCESS_DENIED` ab, solange die smb.conf kein `add share command` setzt, und zwar unabhängig
+davon, welche Rechte der Aufrufer hat; Registry-Freigaben sind davon nicht ausgenommen. Dieser
+Befehl existiert, um ein Skript laufen zu lassen, das die Text-smb.conf umschreibt — und das darf
+eine Konsole einem Server nicht abverlangen. Also nimmt SAMFSCON den Registry-Weg, und die
+Voraussetzung entfällt.
+
+Für **Freigabeberechtigungen** wird das Recht weiterhin gebraucht. Die liegen in `share_info.tdb`,
+haben keine Registry-Entsprechung und gehen über `srvsvc` Level 1501, das es prüft:
 
 ```bash
 net rpc rights grant 'DOMÄNE\Domänen-Admins' SeDiskOperatorPrivilege -U administrator
 ```
 
-SAMFSCON **erkennt beides** und sagt, was fehlt — mitsamt dem Befehl, der es behebt. Es scheitert
-nicht undurchsichtig: Freigabenliste, Berechtigungen und Sitzungen sind da, verweigert werden nur
-die Schreibvorgänge, die die Vorbereitung brauchen. Auf dem Draht sind beide derselbe
-`WERR_ACCESS_DENIED` — genau darum prüft die Konsole sie getrennt: der Hinweis für das eine schickt
-den Leser beim anderen völlig in die falsche Richtung.
+SAMFSCON prüft beides und meldet es getrennt, weil es verschiedene Dinge freischaltet. Zum Lesen
+braucht es nichts davon: Freigabenliste, Optionen, Berechtigungen und Sitzungen sind ohne jede
+Vorbereitung da, und verweigert wird nur, was eine Voraussetzung wirklich braucht.
 
 `samfsconctl check --user administrator` beantwortet dieselbe Frage von der Kommandozeile.
 

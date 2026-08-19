@@ -318,11 +318,16 @@ def test_a_nested_membership_is_not_reported_as_an_absence(monkeypatch) -> None:
 
 
 def test_nobody_holding_it_is_an_absence_and_is_reported(monkeypatch) -> None:
-    """An empty list is an answer, and the one case worth refusing up front."""
+    """An empty list is an answer.
+
+    It bears on share *permissions* — srvsvc level 1501, which has no registry
+    equivalent and really does come down to this privilege. It does not bear on
+    creating shares, which is a registry write and needs none of it.
+    """
     caps = _caps(monkeypatch, [], [])
 
     assert caps.has_disk_operator is False
-    assert caps.can_manage_shares is False
+    assert caps.can_manage_share_permissions is False
     assert any(note.code == "no_disk_operators" for note in caps.notes)
 
 
@@ -344,13 +349,34 @@ def test_an_unconfirmed_privilege_does_not_refuse_the_write(monkeypatch) -> None
     diagnostics.require_share_management(caps)  # must not raise
 
 
-def test_a_confirmed_absence_does_refuse_it(monkeypatch) -> None:
-    from samfscon.core.errors import PermissionDenied
+def test_a_missing_privilege_no_longer_blocks_creating_a_share(monkeypatch) -> None:
+    """It gates srvsvc's NetShareAdd, which this console stopped calling.
+
+    That implementation additionally requires an `add share command` in
+    smb.conf and refuses without one whatever privileges the caller holds —
+    which is the WERR_ACCESS_DENIED a live server produced after the privilege
+    had been granted. Writing the registry key needs neither.
+    """
     from samfscon.srv import diagnostics
 
     caps = _caps(monkeypatch, [], [])
+    caps.registry_config = True
+    caps.registry_writable = True
+
+    diagnostics.require_share_management(caps)  # must not raise
+    assert caps.can_manage_shares is True
+
+
+def test_a_read_only_registry_does_refuse_it(monkeypatch) -> None:
+    """This is the precondition that actually decides it now."""
+    from samfscon.core.errors import PermissionDenied
+    from samfscon.srv import diagnostics
+
+    caps = _caps(monkeypatch, [{"sid": "S-1-5-32-544", "name": "Administrators"}], [])
+    caps.registry_config = True
+    caps.registry_writable = False
+
+    assert caps.can_manage_shares is False
     with pytest.raises(PermissionDenied) as caught:
         diagnostics.require_share_management(caps)
-
-    assert caught.value.hint is not None
-    assert "net rpc rights grant" in caught.value.hint
+    assert caught.value.code == "registry_not_writable"
