@@ -17,6 +17,7 @@ Names are accepted the way people write them: ``alice``, ``EXAMPLE\\alice``,
 
 from __future__ import annotations
 
+import contextlib
 import logging
 from typing import Any
 
@@ -237,7 +238,7 @@ def lookup_names(conn: ServerConnection, names: list[str]) -> list[dict[str, Any
         entry.string = name
         lsa_names.append(entry)
 
-    sids = lsa.TransSidArray2()
+    sids = _empty(lsa.TransSidArray2(), "sids")
     domains = None
     count = 0
 
@@ -297,7 +298,7 @@ def lookup_sids(conn: ServerConnection, sids: list[str]) -> list[dict[str, Any]]
     array.sids = entries
     array.num_sids = len(entries)
 
-    names = lsa.TransNameArray2()
+    names = _empty(lsa.TransNameArray2(), "names")
     domains = None
     count = 0
 
@@ -306,7 +307,9 @@ def lookup_sids(conn: ServerConnection, sids: list[str]) -> list[dict[str, Any]]
         # `names` is a TransNameArray for the plain call and a TransNameArray2
         # for the newer ones, so each candidate builds its own.
         result = _attempt(
-            lambda: pipe.LookupSids(handle, array, domains, lsa.TransNameArray(), 1, count),
+            lambda: pipe.LookupSids(
+                handle, array, domains, _empty(lsa.TransNameArray(), "names"), 1, count
+            ),
             lambda: pipe.LookupSids2(handle, array, domains, names, 1, count, 0, 0),
             lambda: pipe.LookupSids3(array, domains, names, 1, count, 0, 0),
         )
@@ -460,6 +463,22 @@ _SHAPE_ERRORS = frozenset(
         "server_error",
     }
 )
+
+
+def _empty(container: Any, field: str) -> Any:
+    """Give an out-array an explicit count and an explicit empty list.
+
+    The bindings hand back a constructed object whose members are unset, and
+    unset is not the same as empty to the marshaller — a lesson this project has
+    now learned three times, twice in the srvsvc enumerations and once here.
+    Left alone, the call goes out carrying a container the server cannot make
+    sense of, and every name in it comes back unresolved.
+    """
+    # A shape without those members is not a problem to report.
+    with contextlib.suppress(AttributeError, TypeError):
+        container.count = 0
+        setattr(container, field, [])
+    return container
 
 
 def _attempt(*attempts: Any) -> Any:

@@ -15,6 +15,7 @@ Full Control next to a client that says access denied.
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from fastapi import APIRouter
@@ -26,6 +27,7 @@ from samfscon.srv import acl, files, identity, shareacl
 from samfscon.srv.access import srv_read, srv_write
 from samfscon.srv.connection import ServerConnection
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/permissions", tags=["permissions"])
 
 
@@ -222,9 +224,18 @@ def _resolve_trustees(
                 sid = found.get("sid")
                 if sid in to_look_up:
                     trustees[to_look_up[sid]] = found
-        except SamfsconError:
-            # The names are decoration on a descriptor that is already correct.
-            pass
+        except SamfsconError as exc:
+            # The names are decoration on a descriptor that is already correct,
+            # so this must not fail the request — but a silent fallback is how
+            # a column of derived names looked like a working lookup for a
+            # whole round of testing. The reason belongs in `docker logs`.
+            logger.warning(
+                "resolving %d trustee(s) failed (%s); falling back to what the SIDs "
+                "themselves say: %s",
+                len(to_look_up),
+                exc.code,
+                exc.detail or exc.message,
+            )
 
     for sid, trustee in to_look_up.items():
         # Only now. `smbcacls` renders S-1-22-2-0 as "Unix Group\\root", which
