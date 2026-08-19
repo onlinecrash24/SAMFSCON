@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import contextlib
 import logging
+import re
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -150,6 +151,15 @@ def get_share(conn: ServerConnection, name: str) -> Share:
     share.vfs = shareconf.vfs_modules(stored)
     # A share with no registry key of its own comes from the text smb.conf.
     share.editable = bool(stored)
+
+    # Where the registry has the value, it wins. It is what the configuration
+    # actually says and what a save would write back; srvsvc's copy has been
+    # through a Windows-path conversion on the way out. For a share defined in
+    # smb.conf there is no registry copy, and srvsvc's is all there is.
+    if stored.get("path"):
+        share.path = stored["path"]
+    if stored.get("comment"):
+        share.comment = stored["comment"]
     return share
 
 
@@ -224,9 +234,7 @@ def create_share(
     # message names both, in the order that costs least to check.
     served = _exists(conn, name)
     if not served:
-        logger.info(
-            "the registry key for %s is written; the server is not serving it yet", name
-        )
+        logger.info("the registry key for %s is written; the server is not serving it yet", name)
 
     logger.info("share created: %s -> %s", name, path)
     return {
@@ -390,16 +398,26 @@ def _from_srvsvc(entry: Any) -> Share:
     )
 
 
-def _normalise_path(path: str | None) -> str | None:
-    """srvsvc reports Unix paths with backslashes; smb.conf uses slashes.
+# A drive letter at the front of a path srvsvc reported.
+_DRIVE_RE = re.compile(r"^[A-Za-z]:(?=[\/])")
 
-    Shown the way the administrator wrote it in smb.conf, not the way the wire
-    carries it — a path that reads ``\\srv\\shares\\projects`` on a Linux server
-    is a path nobody recognises as their own.
+
+def _normalise_path(path: str | None) -> str | None:
+    r"""The path as the configuration writes it, not as srvsvc dresses it.
+
+    Two things happen to it on the wire. The separators become backslashes, and
+    Samba prefixes a drive letter — srvsvc has to answer with a Windows path, so
+    ``/tank/share`` goes out as ``C:\tank\share``. There is no C: drive on that
+    server and never was.
+
+    Both are undone. A path shown as ``C:/tank/share`` next to a server whose own
+    `net conf list` says ``/tank/share`` is the console disagreeing with the
+    server about the one field an administrator might retype — and it is the
+    field that decides which directory the share publishes.
     """
     if not path:
         return None
-    return path.replace("\\", "/")
+    return _DRIVE_RE.sub("", path.replace("\\", "/")) or None
 
 
 def _number(value: Any) -> int | None:
