@@ -282,6 +282,43 @@ def _create_key(pipe: Any, parent: Any, path: str, access: int) -> Any:
 # does not fit is reported rather than silently truncated.
 VALUE_BUFFER = 8192
 
+# And for a name. Registry key and value names are short; this is generous.
+NAME_BUFFER = 1024
+
+
+def _name_buffer(kind: str) -> Any:
+    """An empty name buffer for one of the enumeration calls to fill.
+
+    The two calls want different types — ``winreg_StringBuf`` for EnumKey,
+    ``winreg_ValNameBuf`` for EnumValue — and handing over the wrong one is a
+    TypeError before the call leaves, which is what stopped every value read.
+
+    All three members are set. ``size`` alone is not enough: the server was
+    answering WERR_INVALID_PARAMETER for a buffer whose ``name`` and ``length``
+    were whatever the constructor left behind, which is the same "unset is not
+    empty" lesson the srvsvc containers taught twice.
+    """
+    from samba.dcerpc import winreg
+
+    for attribute in ("ValNameBuf", "StringBuf") if kind == "value" else ("StringBuf",):
+        factory = getattr(winreg, attribute, None)
+        if factory is None:
+            continue
+        buffer = factory()
+        with contextlib.suppress(AttributeError, TypeError):
+            buffer.name = ""
+        with contextlib.suppress(AttributeError, TypeError):
+            buffer.size = NAME_BUFFER
+        with contextlib.suppress(AttributeError, TypeError):
+            buffer.length = 0
+        return buffer
+
+    raise SamfsconError(
+        "This Samba build exposes no registry name buffer type.",
+        code="winreg_unsupported",
+        detail=f"neither winreg.ValNameBuf nor winreg.StringBuf for a {kind} name",
+    )
+
 
 def _enumerate_values(pipe: Any, key: Any) -> list[tuple[str, str]]:
     """Every value under *key*, as (name, text).
@@ -298,16 +335,12 @@ def _enumerate_values(pipe: Any, key: Any) -> list[tuple[str, str]]:
     is logged: this loop used to treat any exception as "that was all", which
     reported a key whose values could not be read as a key with no values.
     """
-    from samba.dcerpc import winreg
-
     values: list[tuple[str, str]] = []
     shape: Any = None
     index = 0
 
     while index <= 4096:
-        name = winreg.StringBuf()
-        name.size = 1024
-
+        name = _name_buffer("value")
         candidates = _enum_value_shapes(pipe, key, index, name)
         try:
             if shape is None:
@@ -317,10 +350,15 @@ def _enumerate_values(pipe: Any, key: Any) -> list[tuple[str, str]]:
         except _WalkFinished:
             break
         except Exception as exc:  # noqa: BLE001 — one bad key must not end a listing
+            # With the detail. "No known form was accepted" on its own says
+            # nothing; the argument counts inside it name the mismatch, and
+            # that is the whole reason the chain records them.
             logger.warning(
-                "reading registry value %d failed (%s); the ones already read stand",
+                "reading registry value %d failed (%s); detail: %s; "
+                "the ones already read stand",
                 index,
                 exc,
+                getattr(exc, "detail", None) or "-",
             )
             break
 
@@ -339,12 +377,23 @@ class _WalkFinished(Exception):
 
 
 def _enum_value_shapes(pipe: Any, key: Any, index: int, name: Any) -> list[Any]:
-    """The call shapes for one EnumValue, most likely first."""
+    """The call shapes for one EnumValue, most likely first.
+
+    The IDL declares seven in/out parameters, and `size` and `length` are
+    in/out in their own right rather than only being the array's bounds — so
+    seven is the expected count. The shorter forms are here because that
+    expectation has been wrong twice in this file already, and one extra
+    candidate costs a TypeError while one extra round of testing costs a day.
+    """
     return [
         lambda: pipe.EnumValue(key, index, name, 0, [], VALUE_BUFFER, 0),
         lambda: pipe.EnumValue(key, index, name, 0, b"", VALUE_BUFFER, 0),
         lambda: pipe.EnumValue(key, index, name, None, None, VALUE_BUFFER, 0),
         lambda: pipe.EnumValue(key, index, name, None, None, None, None),
+        # Counts other than seven, in case one of the trailing pair is derived.
+        lambda: pipe.EnumValue(key, index, name, 0, [], VALUE_BUFFER),
+        lambda: pipe.EnumValue(key, index, name, 0, []),
+        lambda: pipe.EnumValue(key, index, name),
     ]
 
 
@@ -447,22 +496,42 @@ def _delete_value(pipe: Any, key: Any, name: str) -> None:
 
 
 def _enumerate_keys(pipe: Any, key: Any) -> list[str]:
-    from samba.dcerpc import winreg
+    """The subkeys of *key*, which for the smbconf store are the share names.
 
+    ``keyclass`` and ``last_changed_time`` are [in,out,unique], so NULL is legal
+    for both — but a server answering WERR_INVALID_PARAMETER to that is a server
+    that wants them present, so both forms are offered.
+    """
     names: list[str] = []
+    shape: Any = None
     index = 0
+
     while True:
-        name = winreg.StringBuf()
-        name.size = 1024
+        name = _name_buffer("key")
+        # Bound as defaults: a lambda that closes over the loop variables
+        # reads them at call time, and these are called on later iterations
+        # through the remembered shape.
+        candidates = [
+            lambda n=name, i=index: pipe.EnumKey(key, i, n, _name_buffer("key"), 0),
+            lambda n=name, i=index: pipe.EnumKey(key, i, n, None, None),
+            lambda n=name, i=index: pipe.EnumKey(key, i, n, _name_buffer("key"), None),
+        ]
+
         try:
-            result = pipe.EnumKey(key, index, name, None, None)
+            if shape is None:
+                result, shape = _first_shape(candidates)
+            else:
+                result = candidates[shape]()
+        except _WalkFinished:
+            break
         except Exception as exc:  # noqa: BLE001 — one bad key must not end a listing
-            if "NO_MORE_ITEMS" not in str(exc).upper():
-                logger.warning(
-                    "reading registry key %d failed (%s); the ones already read stand",
-                    index,
-                    exc,
-                )
+            logger.warning(
+                "reading registry key %d failed (%s); detail: %s; "
+                "the ones already read stand",
+                index,
+                exc,
+                getattr(exc, "detail", None) or "-",
+            )
             break
 
         found = getattr(name, "name", None)

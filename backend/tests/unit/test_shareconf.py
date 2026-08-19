@@ -289,3 +289,42 @@ def test_the_registry_walk_tells_the_end_from_a_failure() -> None:
     source = inspect.getsource(registry._enumerate_values)
     assert "_WalkFinished" in source
     assert "logger.warning" in source
+
+
+def test_the_two_enumerations_ask_for_the_types_their_calls_declare() -> None:
+    """winreg_EnumKey takes a StringBuf; winreg_EnumValue takes a ValNameBuf.
+
+    Handing over the wrong one is a TypeError before the call leaves the
+    container, which is what stopped every registry value being read while
+    writing them worked perfectly — the share appeared in `net conf list` and
+    the console still labelled it "from smb.conf", because reading its section
+    back found nothing.
+    """
+    import inspect
+
+    from samfscon.srv import registry
+
+    source = inspect.getsource(registry._name_buffer)
+    assert "ValNameBuf" in source
+    assert "StringBuf" in source
+
+    values = inspect.getsource(registry._enumerate_values)
+    keys = inspect.getsource(registry._enumerate_keys)
+    assert '_name_buffer("value")' in values
+    assert '_name_buffer("key")' in keys
+
+
+def test_a_name_buffer_is_filled_in_rather_than_only_sized() -> None:
+    """The server answered WERR_INVALID_PARAMETER to a half-built one.
+
+    `size` alone left `name` and `length` at whatever the constructor produced,
+    and unset is not empty to the marshaller — the same lesson the srvsvc
+    containers taught twice before this.
+    """
+    import inspect
+
+    from samfscon.srv import registry
+
+    source = inspect.getsource(registry._name_buffer)
+    for member in ("buffer.name", "buffer.size", "buffer.length"):
+        assert member in source, f"{member} is not set"
