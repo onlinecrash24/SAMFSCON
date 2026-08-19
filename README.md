@@ -77,10 +77,11 @@ Both lines, and they do different things. `include = registry` makes Samba read 
 writable for any administrator, so neither of those is evidence that the second line is set —
 SAMFSCON checks by looking for registry sections the server is not serving.
 
-**A share that does not appear straight away is usually not a configuration fault.** smbd re-reads
-the registry on its own schedule, so a correct and complete share can be invisible for a moment.
-`smbcontrol all reload-config` on the server settles it. SAMFSCON says which of the two happened
-rather than reporting a written share as a failure.
+**A share that does not appear straight away has two possible causes**, and they look identical
+from outside: `registry shares = yes` is missing so Samba never looks, or smbd has not re-read the
+registry yet — it does so on its own schedule, and `smbcontrol all reload-config` settles that in a
+second. SAMFSCON reports the share as written and names both, rather than picking one and sending
+you to change a setting that was already right.
 
 A share is a key under `HKLM\Software\Samba\smbconf` with a `path` value, SAMFSCON writes it over
 `winreg`, and Samba loads registry shares on demand. It is the same thing `net rpc conf addshare`

@@ -80,10 +80,12 @@ Beide Zeilen, und sie tun Verschiedenes. `include = registry` lässt Samba den S
 Zeile gesetzt ist. SAMFSCON prüft es daran, ob Registry-Abschnitte existieren, die der Server nicht
 ausliefert.
 
-**Erscheint eine Freigabe nicht sofort, ist das meist kein Konfigurationsfehler.** smbd liest die
-Registry nach eigenem Zeitplan neu, eine korrekte und vollständige Freigabe kann also einen Moment
-unsichtbar sein. `smbcontrol all reload-config` auf dem Server klärt das. SAMFSCON sagt, welcher
-der beiden Fälle vorliegt, statt eine geschriebene Freigabe als Fehlschlag zu melden.
+**Erscheint eine Freigabe nicht sofort, hat das zwei mögliche Ursachen**, und von außen sehen sie
+gleich aus: entweder fehlt `registry shares = yes`, dann sieht Samba gar nicht hin — oder smbd hat
+die Registry noch nicht neu gelesen, was es nach eigenem Zeitplan tut und was
+`smbcontrol all reload-config` in einer Sekunde klärt. SAMFSCON meldet die Freigabe als geschrieben
+und nennt beide, statt sich auf eine festzulegen und Sie eine Einstellung ändern zu lassen, die
+schon richtig war.
 
 Eine Freigabe ist ein Schlüssel unter `HKLM\Software\Samba\smbconf` mit einem `path`-Wert;
 SAMFSCON schreibt ihn über `winreg`, und Samba lädt Registry-Freigaben bei Bedarf. Genau das tut

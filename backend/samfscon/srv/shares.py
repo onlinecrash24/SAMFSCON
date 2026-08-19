@@ -212,15 +212,16 @@ def create_share(
         raise error from exc
 
     # Written. Whether the server is serving it yet is a separate question, and
-    # not one that makes this a failure: smbd re-reads the registry on its own
-    # schedule, so a share that is correct and complete can be invisible for a
-    # moment.
+    # not one that makes this a failure — but there are *two* reasons it might
+    # not be, and from out here they look identical:
     #
-    # The first version of this raised an error saying `registry shares = yes`
-    # was missing. It was not — the line was already there, and one
-    # `smbcontrol all reload-config` was the whole fix. Reporting a correct
-    # creation as a configuration fault sent somebody to change a setting that
-    # was right.
+    #   * `registry shares = yes` is missing, so Samba never looks; or
+    #   * smbd has not re-read the registry yet, which it does on its own
+    #     schedule.
+    #
+    # This has been written twice, once asserting each. Both were wrong in the
+    # same way: one cause named with confidence where two are possible. The
+    # message names both, in the order that costs least to check.
     served = _exists(conn, name)
     if not served:
         logger.info(

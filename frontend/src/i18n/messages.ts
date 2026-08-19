@@ -157,7 +157,7 @@ export const de = {
   'share.connectedCount': '{count} verbunden',
   'share.connected.why': 'So viele Clients haben diese Freigabe gerade geöffnet.',
   'share.createdNotServed':
-    'Die Freigabe {name} wurde geschrieben, der Server liefert sie aber noch nicht aus. Auf dem Server „smbcontrol all reload-config“ ausführen — die Konfiguration ist vollständig, es fehlt nur, dass Samba sie liest.',
+    'Die Freigabe {name} wurde geschrieben, der Server liefert sie aber noch nicht aus. Die Konfiguration ist vollständig — es fehlt eines von zweien: entweder hat smbd die Registry noch nicht neu gelesen („smbcontrol all reload-config“ auf dem Server), oder in der smb.conf fehlt „registry shares = yes“ im Abschnitt [global]. Der Reload ist schneller geprüft.',
   'share.currentUsers': 'Verbunden',
   'share.fromSmbConf': 'aus der smb.conf',
   'share.fromSmbConf.why':
@@ -637,7 +637,7 @@ export const en: Record<MessageKey, string> = {
   'share.connectedCount': '{count} connected',
   'share.connected.why': 'How many clients have this share open right now.',
   'share.createdNotServed':
-    'The share {name} was written, but the server is not serving it yet. Run ‘smbcontrol all reload-config’ on the server — the configuration is complete; Samba has simply not read it.',
+    'The share {name} was written, but the server is not serving it yet. The configuration is complete — one of two things is missing: either smbd has not re-read the registry (‘smbcontrol all reload-config’ on the server), or smb.conf is missing ‘registry shares = yes’ in its [global] section. The reload is quicker to check.',
   'share.currentUsers': 'Connected',
   'share.fromSmbConf': 'from smb.conf',
   'share.fromSmbConf.why':
