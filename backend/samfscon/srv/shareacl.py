@@ -83,11 +83,15 @@ def write(conn: ServerConnection, share: str, sddl: str) -> None:
     info.sd = descriptor
     info.sd_size = len(packed)
 
+    from samfscon.srv.shares import share_info
+
     pipe = conn.srvsvc
+    wrapped = share_info(1501, info)
     errors: list[str] = []
     for attempt in (
+        lambda: pipe.NetShareSetInfo(None, share, 1501, wrapped, 0),
+        lambda: pipe.NetShareSetInfo(None, share, 1501, wrapped, None),
         lambda: pipe.NetShareSetInfo(None, share, 1501, info, 0),
-        lambda: pipe.NetShareSetInfo(None, share, 1501, info, None),
     ):
         try:
             attempt()

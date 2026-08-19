@@ -26,7 +26,7 @@ import logging
 from dataclasses import dataclass, field
 from typing import Any
 
-from samfscon.core.errors import Conflict, InvalidRequest, NotFound, translate
+from samfscon.core.errors import Conflict, InvalidRequest, NotFound, SamfsconError, translate
 from samfscon.srv import registry, shareconf
 from samfscon.srv.connection import ServerConnection
 
@@ -413,13 +413,48 @@ def _add(conn: ServerConnection, *, name: str, path: str, comment: str | None) -
     info.path = path
     info.password = None
 
+    wrapped = share_info(2, info)
     try:
         _attempt(
+            lambda: pipe.NetShareAdd(None, 2, wrapped, 0),
+            lambda: pipe.NetShareAdd(None, 2, wrapped, None),
+            # A build that takes the struct itself. Last, because getting this
+            # wrong is silent: it reaches the server and is refused there.
             lambda: pipe.NetShareAdd(None, 2, info, 0),
-            lambda: pipe.NetShareAdd(None, 2, info, None),
         )
     except Exception as exc:
-        raise translate(exc) from exc
+        raise _add_failure(exc, name) from exc
+
+
+def _add_failure(exc: Exception, name: str) -> SamfsconError:
+    """Turn a refused creation into something that points somewhere useful.
+
+    A name is checked against the characters SMB forbids before the request
+    leaves (see samfscon.schemas.requests). So when the server answers
+    WERR_INVALID_NAME anyway, the two disagree — and the one that is more
+    likely wrong is the request, not the name. Samba returns that status when
+    the share name reaches it *empty*, which is what a malformed structure
+    produces.
+
+    Saying "the name is not valid" there sends the reader to rename a share
+    called "test", which is exactly where it sent one.
+    """
+    error = translate(exc)
+    if error.code != "invalid_name":
+        return error
+
+    return InvalidRequest(
+        "The server rejected the request to create this share.",
+        code="share_add_rejected",
+        hint=(
+            "The name passed SAMFSCON's own check, so the server is objecting "
+            "to the request rather than to the name — most likely it reached "
+            "the server empty. This is a fault in SAMFSCON, not in what was "
+            "typed. The container log has the detail."
+        ),
+        detail=error.detail or error.message,
+        context={"share": name},
+    )
 
 
 def _set_info(
@@ -451,10 +486,12 @@ def _set_info(
     info.path = path or ""
     info.password = None
 
+    wrapped = share_info(2, info)
     try:
         _attempt(
+            lambda: pipe.NetShareSetInfo(None, name, 2, wrapped, 0),
+            lambda: pipe.NetShareSetInfo(None, name, 2, wrapped, None),
             lambda: pipe.NetShareSetInfo(None, name, 2, info, 0),
-            lambda: pipe.NetShareSetInfo(None, name, 2, info, None),
         )
     except Exception as exc:
         raise translate(exc) from exc
@@ -493,6 +530,43 @@ def _reject_administrative(name: str) -> None:
             hint="IPC$, ADMIN$ and print$ are managed by Samba, not by a console.",
             context={"share": name},
         )
+
+
+def share_info(level: int, value: Any) -> Any:
+    """Wrap a NetShareInfo<level> in the union the call actually takes.
+
+    ``NetShareAdd`` and ``NetShareSetInfo`` declare
+    ``[switch_is(level)] srvsvc_NetShareInfo *info`` — a union, whose arm is
+    chosen by the level beside it. Handing them the bare NetShareInfo2 does not
+    fail on the client: it marshals *something*, the server reads a different
+    arm, and `share_name` arrives empty. Samba then answers WERR_INVALID_NAME,
+    which is how creating a share called "test" reported that "test" is not a
+    valid name.
+
+    The member is set by name, falling back to assigning the union whole, the
+    same way the enumeration containers are filled — this is the fourth union
+    in this codebase to need it.
+    """
+    from samba.dcerpc import srvsvc
+
+    try:
+        union = srvsvc.NetShareInfo()
+    except (AttributeError, TypeError):  # pragma: no cover - a build without it
+        return value
+
+    try:
+        setattr(union, f"info{level}", value)
+        return union
+    except (AttributeError, TypeError):
+        pass
+
+    try:
+        union.info = value
+        return union
+    except (AttributeError, TypeError):
+        # A build whose bindings take the struct directly. Passing the union
+        # object would be the wrong shape there, so the bare value goes back.
+        return value
 
 
 def _attempt(*attempts: Any) -> Any:

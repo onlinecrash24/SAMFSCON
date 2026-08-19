@@ -350,8 +350,13 @@ _WERROR: dict[str, tuple[type[SamfsconError], str, str, str | None]] = {
     "WERR_INVALID_NAME": (
         InvalidRequest,
         "invalid_name",
-        "The name is not valid for this server.",
-        None,
+        "The server rejected the name.",
+        (
+            "The characters a share name may not contain are % < > * ? | / \\ "
+            "+ = ; : \" and a comma. The server also answers this when the name "
+            "reaches it empty, which is a fault in the request rather than in "
+            "the name."
+        ),
     ),
     "WERR_INVALID_PARAMETER": (
         InvalidRequest,

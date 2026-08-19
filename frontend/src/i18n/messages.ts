@@ -470,6 +470,9 @@ export const de = {
   'error.sid_not_resolved.hint':
     'Genau so schreiben, wie das Konto auf dem Server heißt, oder als DOMÄNE\\Name für ein Domänenkonto.',
   'error.invalid_sid': 'Das ist keine gültige Sicherheitskennung.',
+  'error.share_add_rejected': 'Der Server hat das Anlegen dieser Freigabe abgelehnt.',
+  'error.share_add_rejected.hint':
+    'Der Name hat die Prüfung von SAMFSCON bestanden — der Server beanstandet also die Anfrage, nicht den Namen; vermutlich kam er leer bei ihm an. Das ist ein Fehler in SAMFSCON, nicht in Ihrer Eingabe. Einzelheiten stehen im Container-Protokoll.',
   'error.invalid_name': 'Der Name ist für diesen Server nicht zulässig.',
   'error.invalid_parameter': 'Der Server hat einen Parameter der Anfrage abgelehnt.',
   'error.invalid_request': 'Die Anfrage ist ungültig.',
@@ -930,6 +933,9 @@ export const en: Record<MessageKey, string> = {
   'error.sid_not_resolved.hint':
     'Spell it as it exists on the server, or as DOMAIN\\name for a domain account.',
   'error.invalid_sid': 'This is not a valid security identifier.',
+  'error.share_add_rejected': 'The server rejected the request to create this share.',
+  'error.share_add_rejected.hint':
+    'The name passed SAMFSCON’s own check, so the server is objecting to the request rather than to the name — most likely it reached the server empty. This is a fault in SAMFSCON, not in what was typed. The container log has the detail.',
   'error.invalid_name': 'The name is not valid for this server.',
   'error.invalid_parameter': 'The server rejected a parameter of the request.',
   'error.invalid_request': 'The request is invalid.',
