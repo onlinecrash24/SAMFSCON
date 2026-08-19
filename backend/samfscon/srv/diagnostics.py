@@ -69,6 +69,12 @@ class Capabilities:
     # permissions are missing when it simply could not look.
     registry_config: bool | None = None
     registry_writable: bool | None = None
+    # Whether the server actually serves what is written there. Separate from
+    # the two above, and it has to be: the store is openable on every Samba,
+    # writable for any administrator, and ignored entirely unless
+    # `registry shares = yes` is in the text smb.conf — which is the one file
+    # this console cannot read. It is observed rather than asked.
+    registry_shares_served: bool | None = None
     has_disk_operator: bool | None = None
     disk_operators: list[str] = field(default_factory=list)
     notes: list[Note] = field(default_factory=list)
@@ -88,7 +94,11 @@ class Capabilities:
         registry equivalent and go through srvsvc level 1501. That is a
         different question and gets a different field.
         """
-        if self.registry_config is False or self.registry_writable is False:
+        if (
+            self.registry_config is False
+            or self.registry_writable is False
+            or self.registry_shares_served is False
+        ):
             return False
         if self.registry_config and self.registry_writable:
             return True
@@ -107,6 +117,7 @@ class Capabilities:
         return {
             "registry_config": self.registry_config,
             "registry_writable": self.registry_writable,
+            "registry_shares_served": self.registry_shares_served,
             "has_disk_operator": self.has_disk_operator,
             "disk_operators": list(self.disk_operators),
             "can_manage_shares": self.can_manage_shares,
@@ -210,6 +221,17 @@ def _check_registry(conn: ServerConnection, caps: Capabilities) -> None:
         caps.notes.append(Note("registry_read_only"))
     except Exception:
         logger.debug("registry write probe failed", exc_info=True)
+
+    # Being able to write there is not the same as the server reading it.
+    from samfscon.srv import shares
+
+    try:
+        caps.registry_shares_served = shares.registry_shares_served(conn)
+    except Exception:  # a probe must not break the console
+        logger.debug("the registry-shares check failed", exc_info=True)
+
+    if caps.registry_shares_served is False:
+        caps.notes.append(Note("registry_shares_disabled"))
 
 
 def _check_privilege(conn: ServerConnection, caps: Capabilities, sid: str | None) -> None:
@@ -318,6 +340,17 @@ def require_share_management(caps: Capabilities) -> None:
                 "Reading works without it; only changes need it."
             ),
         )
+    if caps.registry_shares_served is False:
+        raise NotConfigured(
+            "This server does not serve registry shares.",
+            code="registry_shares_disabled",
+            hint=(
+                "It already has share configuration in its registry that it is "
+                "ignoring. Add 'registry shares = yes' to the [global] section "
+                "of its smb.conf and reload Samba."
+            ),
+        )
+
     if caps.registry_writable is False:
         raise PermissionDenied(
             "Your account may not change this server's configuration.",

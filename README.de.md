@@ -74,9 +74,16 @@ Servers:
     registry shares = yes
 ```
 
-Mehr wirklich nicht. Eine Freigabe ist ein Schlüssel unter `HKLM\Software\Samba\smbconf` mit
-einem `path`-Wert; SAMFSCON schreibt ihn über `winreg`, und Samba lädt Registry-Freigaben bei
-Bedarf. Genau das tut auch `net rpc conf addshare`.
+Beide Zeilen, und sie tun Verschiedenes. `include = registry` lässt Samba den Speicher lesen;
+**`registry shares = yes` lässt es ausliefern, was darin steht** — ohne diese Zeile lässt sich eine
+Freigabe einwandfrei schreiben und erscheint trotzdem nie. Der Speicher ist auf jedem Samba
+öffenbar und für jeden Administrator beschreibbar, keines von beidem belegt also, dass diese Zeile
+gesetzt ist. SAMFSCON prüft es daran, ob Registry-Abschnitte existieren, die der Server nicht
+ausliefert, und sagt es dann.
+
+Eine Freigabe ist ein Schlüssel unter `HKLM\Software\Samba\smbconf` mit einem `path`-Wert;
+SAMFSCON schreibt ihn über `winreg`, und Samba lädt Registry-Freigaben bei Bedarf. Genau das tut
+auch `net rpc conf addshare`.
 
 **Nicht** `SeDiskOperatorPrivilege`, und **kein** `add share command` — was der Erwähnung wert ist,
 weil der naheliegende Weg beides braucht. Sambas eigenes `NetShareAdd` lehnt mit

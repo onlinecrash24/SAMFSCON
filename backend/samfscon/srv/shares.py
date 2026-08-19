@@ -27,7 +27,13 @@ import logging
 from dataclasses import dataclass, field
 from typing import Any
 
-from samfscon.core.errors import Conflict, InvalidRequest, NotFound, translate
+from samfscon.core.errors import (
+    Conflict,
+    InvalidRequest,
+    NotConfigured,
+    NotFound,
+    translate,
+)
 from samfscon.srv import registry, shareconf
 from samfscon.srv.connection import ServerConnection
 
@@ -210,6 +216,28 @@ def create_share(
         with contextlib.suppress(Exception):
             registry.delete_section(conn, name)
         raise error from exc
+
+    # Written. Now ask the server whether it has one — the same check anybody
+    # would run afterwards, and the only thing that distinguishes a share from a
+    # registry key nobody reads.
+    if not _exists(conn, name):
+        logger.warning(
+            "the registry key for %s was written but the server serves no such share",
+            name,
+        )
+        raise NotConfigured(
+            "The share was written, but this server does not serve registry shares.",
+            code="registry_shares_disabled",
+            hint=(
+                "Add 'registry shares = yes' to the [global] section of the "
+                "server's smb.conf and reload Samba. The configuration for this "
+                "share is already in place and will take effect then — nothing "
+                "needs entering again. Without it Samba ignores everything under "
+                "HKLM\\Software\\Samba\\smbconf, which is where every share this "
+                "console writes goes."
+            ),
+            context={"share": name},
+        )
 
     logger.info("share created: %s -> %s", name, path)
     return {"name": name, "path": path, "comment": comment, "options": applied}
@@ -432,6 +460,39 @@ def _registry_sections(conn: ServerConnection) -> set[str] | None:
     except Exception:  # a server without registry config is normal
         logger.debug("the registry configuration could not be enumerated", exc_info=True)
         return None
+
+
+def registry_shares_served(conn: ServerConnection) -> bool | None:
+    """Whether this server actually serves what is in its registry.
+
+    Not answerable by asking: `registry shares` lives in the text smb.conf,
+    which is exactly the file this console cannot read. But it is observable —
+    if the registry holds share sections and none of them appears in the live
+    share list, the server is ignoring them.
+
+    ``None`` when there is nothing to compare: a registry with no sections
+    proves nothing either way, and neither does one whose sections are all also
+    defined in smb.conf.
+    """
+    sections = _registry_sections(conn)
+    if not sections:
+        return None
+
+    try:
+        live = {share.name.lower() for share in _enumerate_names(conn)}
+    except Exception:  # a probe must not break the console
+        logger.debug("the share list could not be read for the registry check", exc_info=True)
+        return None
+
+    return bool(sections & live)
+
+
+def _enumerate_names(conn: ServerConnection) -> list[Share]:
+    """The live share list, without the registry lookup list_shares does.
+
+    Called *from* that lookup's neighbour, so it must not call back into it.
+    """
+    return [_from_srvsvc(entry) for entry in _enumerate(conn)]
 
 
 def _reject_administrative(name: str) -> None:

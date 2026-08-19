@@ -204,6 +204,13 @@ export interface CapabilityNote {
 export interface Capabilities {
   registry_config: boolean | null
   registry_writable: boolean | null
+  /**
+   * Whether the server actually serves what is written there. Separate from
+   * the two above and it has to be: the store is openable on every Samba,
+   * writable for any administrator, and ignored entirely unless
+   * `registry shares = yes` is in the text smb.conf.
+   */
+  registry_shares_served: boolean | null
   has_disk_operator: boolean | null
   disk_operators: string[]
   /** Creating, changing and deleting shares — a registry write. */

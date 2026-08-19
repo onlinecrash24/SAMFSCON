@@ -72,9 +72,15 @@ sessions, open files, permissions and local accounts.
     registry shares = yes
 ```
 
-That is genuinely all. A share is a key under `HKLM\Software\Samba\smbconf` with a `path` value,
-SAMFSCON writes it over `winreg`, and Samba loads registry shares on demand. It is the same thing
-`net rpc conf addshare` does.
+Both lines, and they do different things. `include = registry` makes Samba read the store;
+**`registry shares = yes` is what makes it serve what is in there**, and without it a share can be
+written perfectly and simply never appear. The store is openable on every Samba and writable for
+any administrator, so neither of those is evidence that this line is set — SAMFSCON checks by
+looking for registry sections the server is not serving, and says so when it finds them.
+
+A share is a key under `HKLM\Software\Samba\smbconf` with a `path` value, SAMFSCON writes it over
+`winreg`, and Samba loads registry shares on demand. It is the same thing `net rpc conf addshare`
+does.
 
 **Not** `SeDiskOperatorPrivilege`, and not an `add share command` — which is worth saying because
 the obvious route needs both. `srvsvc`'s own `NetShareAdd` refuses with `WERR_ACCESS_DENIED` unless
