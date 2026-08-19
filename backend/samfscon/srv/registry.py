@@ -277,34 +277,98 @@ def _create_key(pipe: Any, parent: Any, path: str, access: int) -> Any:
     return result
 
 
+# How much room to give EnumValue for one value's data. smb.conf options are
+# short — the longest realistic one is a `veto files` list — and a value that
+# does not fit is reported rather than silently truncated.
+VALUE_BUFFER = 8192
+
+
 def _enumerate_values(pipe: Any, key: Any) -> list[tuple[str, str]]:
     """Every value under *key*, as (name, text).
 
-    ``EnumValue`` is an index walk that ends with WERR_NO_MORE_ITEMS, and the
-    buffer sizes it wants are arguments rather than something it works out — a
-    detail that has moved between Samba releases more than once, which is why
-    the shapes are tried rather than assumed.
+    ``EnumValue`` is an index walk that ends with WERR_NO_MORE_ITEMS, and it
+    fills buffers the caller provides: passing None for the data, its size and
+    its length asks the server for a value and gives it nowhere to put one.
+
+    Which shape the bindings want has moved between releases, so the candidates
+    are tried on the first index and the one that answers is used for the rest —
+    re-deciding on every value would turn a walk of ten into thirty calls.
+
+    The end of the walk is one specific status. Everything else is a failure and
+    is logged: this loop used to treat any exception as "that was all", which
+    reported a key whose values could not be read as a key with no values.
     """
     from samba.dcerpc import winreg
 
     values: list[tuple[str, str]] = []
+    shape: Any = None
     index = 0
-    while True:
+
+    while index <= 4096:
         name = winreg.StringBuf()
         name.size = 1024
+
+        candidates = _enum_value_shapes(pipe, key, index, name)
         try:
-            result = pipe.EnumValue(key, index, name, None, None, None, None)
-        except Exception:  # noqa: BLE001 — the documented end of the walk
+            if shape is None:
+                result, shape = _first_shape(candidates)
+            else:
+                result = candidates[shape]()
+        except _WalkFinished:
+            break
+        except Exception as exc:  # noqa: BLE001 — one bad key must not end a listing
+            logger.warning(
+                "reading registry value %d failed (%s); the ones already read stand",
+                index,
+                exc,
+            )
             break
 
         entry = _decode_value(result, name)
         if entry is not None:
             values.append(entry)
         index += 1
-        if index > 4096:  # pragma: no cover — a runaway server, not a real case
-            logger.warning("stopping registry enumeration after 4096 values")
-            break
+
+    if index > 4096:  # pragma: no cover — a runaway server, not a real case
+        logger.warning("stopping registry enumeration after 4096 values")
     return values
+
+
+class _WalkFinished(Exception):
+    """WERR_NO_MORE_ITEMS: the documented end, not a failure."""
+
+
+def _enum_value_shapes(pipe: Any, key: Any, index: int, name: Any) -> list[Any]:
+    """The call shapes for one EnumValue, most likely first."""
+    return [
+        lambda: pipe.EnumValue(key, index, name, 0, [], VALUE_BUFFER, 0),
+        lambda: pipe.EnumValue(key, index, name, 0, b"", VALUE_BUFFER, 0),
+        lambda: pipe.EnumValue(key, index, name, None, None, VALUE_BUFFER, 0),
+        lambda: pipe.EnumValue(key, index, name, None, None, None, None),
+    ]
+
+
+def _first_shape(candidates: list[Any]) -> tuple[Any, int]:
+    """Run the first shape that is accepted, and say which it was."""
+    errors: list[str] = []
+    for position, candidate in enumerate(candidates):
+        try:
+            return candidate(), position
+        except (TypeError, AttributeError) as exc:
+            errors.append(f"{type(exc).__name__}: {exc}")
+            continue
+        except Exception as exc:
+            # From the server. An empty key answers the very first index this
+            # way, which is the ordinary end of a walk that had nothing in it.
+            if "NO_MORE_ITEMS" in str(exc).upper():
+                raise _WalkFinished from exc
+            raise
+
+    raise SamfsconError(
+        "No known form of EnumValue was accepted.",
+        code="winreg_unsupported",
+        detail="; ".join(errors),
+    )
 
 
 def _decode_value(result: Any, name: Any) -> tuple[str, str] | None:
@@ -348,13 +412,26 @@ def _encode_text(value: str) -> bytes:
 
 
 def _set_value(pipe: Any, key: Any, name: str, value: str) -> None:
+    """Write one value.
+
+    The IDL declares five parameters, and the binding takes four: ``size`` is
+    ``size_is(size)`` for the data array, and pidl derives it from the array
+    rather than accepting it. That is the same rule that made every LSA lookup
+    fail — ``domains`` there was ``[out]`` and equally not an argument — and it
+    is worth stating once as a rule rather than rediscovering per call: **a
+    parameter the wire format can work out for itself is not in the python
+    signature.**
+
+    The length-bearing form is kept last for a build that disagrees.
+    """
     data = _encode_text(value)
     _call(
         pipe,
         "SetValue",
         (
+            lambda: pipe.SetValue(key, _string(name), REG_SZ, data),
+            lambda: pipe.SetValue(key, _string(name), REG_SZ, list(data)),
             lambda: pipe.SetValue(key, _string(name), REG_SZ, data, len(data)),
-            lambda: pipe.SetValue(key, _string(name), REG_SZ, list(data), len(data)),
         ),
         what=name,
     )
@@ -379,7 +456,13 @@ def _enumerate_keys(pipe: Any, key: Any) -> list[str]:
         name.size = 1024
         try:
             result = pipe.EnumKey(key, index, name, None, None)
-        except Exception:  # noqa: BLE001 — the documented end of the walk
+        except Exception as exc:  # noqa: BLE001 — one bad key must not end a listing
+            if "NO_MORE_ITEMS" not in str(exc).upper():
+                logger.warning(
+                    "reading registry key %d failed (%s); the ones already read stand",
+                    index,
+                    exc,
+                )
             break
 
         found = getattr(name, "name", None)
@@ -419,8 +502,13 @@ def _call(pipe: Any, operation: str, attempts: tuple[Any, ...], *, what: str) ->
             raise translate(exc) from exc
 
     raise SamfsconError(
-        f"The registry call {operation} is not supported by this Samba build.",
+        f"No known form of the registry call {operation} was accepted.",
         code="winreg_unsupported",
         detail="; ".join(errors),
+        hint=(
+            "Every shape SAMFSCON knows for this call was refused by the "
+            "bindings before it reached the server. The detail lists what each "
+            "one said; the argument counts in it name the mismatch."
+        ),
         context={"target": what},
     )

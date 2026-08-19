@@ -248,3 +248,44 @@ def test_a_refusal_is_still_a_refusal() -> None:
 
     assert shares._missing(translate(RuntimeError("WERR_ACCESS_DENIED"))) is False
     assert shares._missing(translate(RuntimeError("NT_STATUS_ACCESS_DENIED"))) is False
+
+
+# ---------------------------------------------------------------------------
+# The rule that keeps costing round trips
+#
+# pidl leaves out of the python signature anything the wire format can work out
+# for itself: an [out] parameter, and the count of a size_is() array. Three
+# calls have been wrong for exactly this reason — `domains` in every LSA lookup,
+# `size` in winreg SetValue, and `num_names` in LookupNames — so it is written
+# down as a rule rather than rediscovered per call.
+# ---------------------------------------------------------------------------
+
+
+def test_set_value_offers_the_derived_form_first() -> None:
+    """winreg_SetValue takes four arguments; the IDL declares five.
+
+    `size` is size_is() for the data array, so pidl derives it. Sending it
+    produced "takes at most 4 arguments (5 given)" and nothing was written.
+    """
+    import inspect
+
+    from samfscon.srv import registry
+
+    source = inspect.getsource(registry._set_value)
+    first = source.index("pipe.SetValue")
+    assert "REG_SZ, data)" in source[first : first + 120]
+
+
+def test_the_registry_walk_tells_the_end_from_a_failure() -> None:
+    """Any exception used to mean "that was all".
+
+    A key whose values could not be read then reported as a key with no values,
+    which is the same silent-absence fault as everywhere else in this codebase.
+    """
+    import inspect
+
+    from samfscon.srv import registry
+
+    source = inspect.getsource(registry._enumerate_values)
+    assert "_WalkFinished" in source
+    assert "logger.warning" in source
