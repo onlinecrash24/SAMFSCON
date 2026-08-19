@@ -109,7 +109,7 @@ export function ShareDetail({
           <button
             key={entry}
             type="button"
-            className={group === entry ? 'tab tab--active' : 'tab'}
+            className={group === entry ? 'tabs__tab tabs__tab--active' : 'tabs__tab'}
             onClick={() => setGroup(entry)}
           >
             {t(`share.group.${entry}`)}

@@ -311,7 +311,11 @@ button:focus-visible {
      panes needs its own prefix: a second `.console__panes` further down the
      file silently turned this three-column grid into two, and the detail pane
      wrapped onto a new row under the tree. */
-  grid-template-columns: minmax(210px, 280px) minmax(340px, 1fr) minmax(420px, 640px);
+     SAMFSCON has two: the tree and the working area. Its detail panes belong
+     to the views (a share's tabs, an account's dialog) rather than to the
+     shell, so a third shell column would have been an empty strip down the
+     right of every screen — which is exactly what it was. */
+  grid-template-columns: minmax(210px, 280px) 1fr;
   flex: 1;
   min-height: 0;
 }
@@ -335,8 +339,7 @@ button:focus-visible {
 .pane__actions { display: flex; gap: 6px; flex-wrap: wrap; }
 
 @media (max-width: 1100px) {
-  .console__panes { grid-template-columns: 220px 1fr; }
-  .pane--detail { grid-column: 1 / -1; border-left: none; border-top: 1px solid var(--border); }
+  .console__panes { grid-template-columns: 200px 1fr; }
 }
 @media (max-width: 720px) {
   .console__panes { grid-template-columns: 1fr; }
@@ -844,3 +847,202 @@ button:focus-visible {
 /* A disabled fieldset greys its inputs; say why rather than leaving it to
    be guessed at. */
 fieldset[disabled] { opacity: 0.6; }
+
+
+/* ===================================================================== */
+/* SAMFSCON's own views                                                  */
+/*                                                                       */
+/* The rest of this file came from SAMADCON, whose shell is a directory  */
+/* tree, an object list and a property sheet. A file server is not a     */
+/* directory: what it has is a handful of flat lists, so the navigation  */
+/* is a list of snap-ins and each view brings its own two-pane split     */
+/* where it needs one.                                                   */
+/* ===================================================================== */
+
+/* The working area. `.pane--tree` and `.pane--detail` are the shell's;
+   this is the middle one, which SAMFSCON fills with a whole view. */
+.pane--list { display: flex; flex-direction: column; }
+
+/* Navigation ----------------------------------------------------------- */
+
+.tree__root {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 6px;
+}
+.tree__rootText { display: flex; flex-direction: column; min-width: 0; line-height: 1.25; }
+.tree__rootText strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.tree__list { list-style: none; margin: 0; padding: 0 6px; }
+
+.tree__item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 8px;
+  border: none;
+  /* A transparent left edge that the active state colours in. Setting the
+     border only when active would shift every other row by 2px on selection. */
+  border-left: 2px solid transparent;
+  border-radius: var(--radius);
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.92em;
+  text-align: left;
+  cursor: pointer;
+}
+.tree__item:hover { background: var(--hover); }
+.tree__item--active {
+  background: var(--selected);
+  border-left-color: var(--accent);
+  font-weight: 500;
+}
+/* Two reasons a row can be inactive, and they are not the same thing: not
+   built yet, and not applicable to this server. Both are dimmed; the title
+   attribute says which. */
+.tree__item[aria-disabled='true'] { color: var(--text-muted); cursor: default; }
+.tree__item[aria-disabled='true']:hover { background: none; }
+.tree__badge { margin-left: auto; color: var(--text-muted); }
+
+/* How the session is protected, in the top bar -------------------------- */
+
+.topbar__state {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+/* Lists of things that are not table rows ------------------------------- */
+
+.list__item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 7px 12px;
+  border: none;
+  border-left: 2px solid transparent;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.list__item:hover { background: var(--hover); }
+.list__item:disabled { opacity: 0.6; cursor: default; }
+.list__item:disabled:hover { background: none; }
+.list__item--selected {
+  background: var(--selected);
+  border-left-color: var(--accent);
+}
+/* A row that is only ever read. Same shape, no affordance it cannot honour. */
+.list__item--static { cursor: default; }
+.list__item--static:hover { background: none; }
+
+.list--shares { list-style: none; margin: 0; padding: 0; }
+.list--shares > li + li { border-top: 1px solid color-mix(in srgb, var(--border) 55%, transparent); }
+
+.list__meta {
+  color: var(--text-muted);
+  font-size: 0.85em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* The name takes what it needs, the path takes what is left, and neither
+   pushes the badges off the end. */
+.list--shares .list__name { flex: 0 0 auto; font-weight: 500; }
+.list--shares .list__meta { flex: 1 1 auto; min-width: 0; }
+
+/* Shares: a list beside the share that is open -------------------------- */
+
+.shares,
+.sessions,
+.accounts { display: flex; flex-direction: column; min-height: 0; flex: 1; }
+
+.shares__split {
+  display: grid;
+  grid-template-columns: minmax(240px, 340px) 1fr;
+  flex: 1;
+  min-height: 0;
+}
+.shares__split > .list--shares { overflow: auto; border-right: 1px solid var(--border); }
+.shares__detail { overflow: auto; background: var(--surface-alt); }
+
+@media (max-width: 900px) {
+  .shares__split { grid-template-columns: 1fr; }
+  .shares__split > .list--shares { border-right: none; border-bottom: 1px solid var(--border); }
+}
+
+/* Sessions and accounts are plain stacked tables, so they need the padding
+   the panes' other children bring with them. */
+.sessions > .detail__section,
+.accounts > .detail__section { padding: 0 14px; }
+.sessions .table,
+.accounts .table { margin-top: 6px; }
+.sessions > .pane__header input[type='search'] { max-width: 320px; }
+
+/* A row that is shown but not editable — an inherited permission entry.
+   Dimmed rather than hidden: it is doing something, it just is not doing it
+   here. */
+.row--muted td { color: var(--text-muted); }
+
+/* Permissions ----------------------------------------------------------- */
+
+.permissions { padding: 4px 0 0; }
+.permissions .table { margin: 10px 0 14px; }
+.permissions select { max-width: 220px; }
+/* The effective-access panel: an answer, so it reads as one rather than as
+   another row of the table above it. */
+.permissions .detail__section {
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+.permissions .detail__section h3 { margin: 0 0 6px; font-size: 0.95em; }
+.permissions .detail__section p { margin: 0 0 6px; }
+
+/* Detail sheets --------------------------------------------------------- */
+
+.detail__badges { display: flex; gap: 6px; align-items: center; margin-left: auto; }
+.detail__footer {
+  display: flex;
+  gap: 8px;
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+
+/* Options a server has and this console does not describe. Read-only, and
+   shown rather than hidden. */
+.kv { margin: 8px 0 0; display: grid; gap: 4px; }
+.kv > div { display: grid; grid-template-columns: minmax(140px, 260px) 1fr; gap: 12px; }
+.kv dt { color: var(--text-muted); font-size: 0.85em; overflow-wrap: anywhere; }
+.kv dd { margin: 0; font-size: 0.85em; overflow-wrap: anywhere; }
+
+/* Sign-in --------------------------------------------------------------- */
+
+.login__logo { width: 100%; max-width: 320px; height: auto; margin-bottom: 18px; }
+.login__language { position: absolute; top: 12px; right: 14px; }
+.login__card { position: relative; }
+
+.login__row { display: flex; gap: 8px; }
+.login__row input { flex: 1; min-width: 0; }
+
+.login__recents { margin: -4px 0 12px; }
+.login__recents ul { list-style: none; margin: 4px 0 0; padding: 0; display: grid; gap: 2px; }
+.login__recents li { display: flex; align-items: center; gap: 6px; }
+.login__recents .link { font-size: 0.88em; }
+
+/* A control that is there when wanted and never competes for attention —
+   the × that forgets a remembered server. */
+.link--quiet { color: var(--text-muted); }
+.link--quiet:hover { color: var(--text); }

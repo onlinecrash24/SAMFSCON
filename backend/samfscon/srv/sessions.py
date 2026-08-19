@@ -31,6 +31,14 @@ from samfscon.srv.connection import ServerConnection
 
 logger = logging.getLogger(__name__)
 
+# "As much as you have" for the Net*Enum buffer size. Written as the unsigned
+# value rather than as -1: the field is a uint32 on the wire, and the binding
+# rejects a negative Python int with "can't convert negative int to unsigned"
+# — an exception that comes from the marshalling layer, names no call, and is
+# therefore reported as an unexpected error. The share enumeration used the
+# unsigned form from the start and worked; these three did not and did not.
+MAX_BUFFER = 0xFFFFFFFF
+
 # NetFileEnum permission bits (MS-SRVS 2.2.2.10).
 PERM_FILE_READ = 0x01
 PERM_FILE_WRITE = 0x02
@@ -119,7 +127,9 @@ def list_sessions(
 
     entries = _enumerate(
         conn,
-        lambda pipe, ctr, resume: pipe.NetSessEnum(None, client, user, ctr, -1, resume),
+        lambda pipe, ctr, resume: pipe.NetSessEnum(
+            None, client, user, ctr, MAX_BUFFER, resume
+        ),
         lambda: _ctr(srvsvc.NetSessInfoCtr(), 2, srvsvc.NetSessCtr2()),
     )
     return [_session_from(entry) for entry in entries]
@@ -136,7 +146,7 @@ def list_connections(conn: ServerConnection, share: str) -> list[Connection]:
 
     entries = _enumerate(
         conn,
-        lambda pipe, ctr, resume: pipe.NetConnEnum(None, share, ctr, -1, resume),
+        lambda pipe, ctr, resume: pipe.NetConnEnum(None, share, ctr, MAX_BUFFER, resume),
         lambda: _ctr(srvsvc.NetConnInfoCtr(), 1, srvsvc.NetConnCtr1()),
     )
     return [_connection_from(entry, share) for entry in entries]
@@ -155,7 +165,9 @@ def list_open_files(
 
     entries = _enumerate(
         conn,
-        lambda pipe, ctr, resume: pipe.NetFileEnum(None, path, user, ctr, -1, resume),
+        lambda pipe, ctr, resume: pipe.NetFileEnum(
+            None, path, user, ctr, MAX_BUFFER, resume
+        ),
         lambda: _ctr(srvsvc.NetFileInfoCtr(), 3, srvsvc.NetFileCtr3()),
     )
     return [_file_from(entry) for entry in entries]

@@ -65,18 +65,22 @@ export function SharesView({ onChanged }: { onChanged: (message: string) => void
         </div>
       </div>
 
-      {/* Why the button is disabled, in the words that name the fix. */}
+      {/* Why the button is disabled, in the words that name the fix.
+          "Could not be determined" on its own is the least useful thing this
+          banner can say, so the notes the capability check collected are shown
+          with it — they name which query was refused. */}
       {capabilities && capabilities.can_manage_shares !== true && (
         <Banner
-          message={
+          message={[
             capabilities.registry_config === false
               ? t('caps.noRegistryConfig')
               : capabilities.has_disk_operator === false
                 ? t('caps.noDiskOperator', {
                     names: capabilities.disk_operators.join(', ') || '—',
                   })
-                : t('caps.unknownWhy')
-          }
+                : t('caps.unknownWhy'),
+            ...capabilities.notes,
+          ].join(' — ')}
           tone="warning"
         />
       )}
