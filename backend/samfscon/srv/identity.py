@@ -239,21 +239,22 @@ def lookup_names(conn: ServerConnection, names: list[str]) -> list[dict[str, Any
         lsa_names.append(entry)
 
     sids = _empty(lsa.TransSidArray2(), "sids")
-    domains = None
     count = 0
 
     try:
-        # Ordered by what a member server most likely implements. The plain
-        # call first because it is the one every generation has; the numbered
-        # variants after it. LookupNames3 takes *no* policy handle — it is the
-        # form used where there is no policy to open — so passing one is a
-        # signature error rather than a call.
+        # `domains` is [out] in the IDL: the bindings return it and do not take
+        # it. Passing it is one argument too many, which is what every one of
+        # these calls was doing — and the refusal reached the log as
+        # "takes at most N arguments (N+1 given)", three times over, before
+        # anybody read it.
+        #
+        # LookupNames3 also takes no policy handle: it is the form for where
+        # there is no policy to open.
         result = _attempt(
-            lambda: pipe.LookupNames(handle, lsa_names, domains, sids, 1, count),
-            lambda: pipe.LookupNames2(
-                handle, len(lsa_names), lsa_names, domains, sids, 1, count, 0, 0
-            ),
-            lambda: pipe.LookupNames3(lsa_names, domains, sids, 1, count, 0, 0),
+            lambda: pipe.LookupNames(handle, lsa_names, sids, 1, count),
+            lambda: pipe.LookupNames(handle, len(lsa_names), lsa_names, sids, 1, count),
+            lambda: pipe.LookupNames2(handle, lsa_names, sids, 1, count, 0, 0),
+            lambda: pipe.LookupNames3(lsa_names, sids, 1, count, 0, 0),
         )
     except SamfsconError as exc:
         # NT_STATUS_NONE_MAPPED means nothing resolved, which is an answer
@@ -299,19 +300,16 @@ def lookup_sids(conn: ServerConnection, sids: list[str]) -> list[dict[str, Any]]
     array.num_sids = len(entries)
 
     names = _empty(lsa.TransNameArray2(), "names")
-    domains = None
     count = 0
 
     try:
-        # As above: the plain call first, and LookupSids3 without a handle.
+        # As above: no `domains` argument, and no handle for the *3 form.
         # `names` is a TransNameArray for the plain call and a TransNameArray2
         # for the newer ones, so each candidate builds its own.
         result = _attempt(
-            lambda: pipe.LookupSids(
-                handle, array, domains, _empty(lsa.TransNameArray(), "names"), 1, count
-            ),
-            lambda: pipe.LookupSids2(handle, array, domains, names, 1, count, 0, 0),
-            lambda: pipe.LookupSids3(array, domains, names, 1, count, 0, 0),
+            lambda: pipe.LookupSids(handle, array, _empty(lsa.TransNameArray(), "names"), 1, count),
+            lambda: pipe.LookupSids2(handle, array, names, 1, count, 0, 0),
+            lambda: pipe.LookupSids3(array, names, 1, count, 0, 0),
         )
     except SamfsconError as exc:
         if exc.code == "sid_not_resolved":
@@ -515,14 +513,45 @@ def _attempt(*attempts: Any) -> Any:
     )
 
 
-def _unpack_user_name(result: Any) -> tuple[str | None, str | None]:
-    """GetUserName returns (account, authority) in one shape or another."""
+def _lsa_text(value: Any) -> str | None:
+    """The text inside whatever the bindings handed back.
+
+    ``lsa_String`` has ``.string``; a ``[unique]`` parameter arrives wrapped in
+    an NDR pointer that has to be stepped through first. Getting that wrong does
+    not fail — it stringifies the pointer, and
+    "<base.ndr_pointer talloc based object at 0x350f1e20>" then travels on as
+    half of a name to look up, which is how an account this console had already
+    identified became one it could not find.
+    """
     from samfscon.srv.discovery import _text
 
-    if not isinstance(result, tuple):
-        return _text(getattr(result, "string", result)), None
+    seen = 0
+    while value is not None and seen < 4:
+        if isinstance(value, str | bytes):
+            return _text(value)
+        for attribute in ("string", "value", "name"):
+            inner = getattr(value, attribute, None)
+            if inner is not None and inner is not value:
+                value = inner
+                break
+        else:
+            break
+        seen += 1
 
-    parts = [_text(getattr(item, "string", item)) for item in result if item is not None]
+    text = _text(value)
+    # A repr rather than a value. Better nothing than a pointer address in a
+    # field the interface prints as an account's domain.
+    if text and " object at 0x" in text:
+        return None
+    return text
+
+
+def _unpack_user_name(result: Any) -> tuple[str | None, str | None]:
+    """GetUserName returns (account, authority) in one shape or another."""
+    if not isinstance(result, tuple):
+        return _lsa_text(result), None
+
+    parts = [_lsa_text(item) for item in result if item is not None]
     name = parts[0] if parts else None
     authority = parts[1] if len(parts) > 1 else None
     return name, authority

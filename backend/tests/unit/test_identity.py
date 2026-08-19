@@ -71,3 +71,56 @@ def test_derived_names_are_marked_as_derived() -> None:
     found = identity.well_known_name("S-1-5-32-544")
     assert found is not None
     assert found.get("derived") is True
+
+
+# ---------------------------------------------------------------------------
+# What the bindings hand back is not always what it looks like
+# ---------------------------------------------------------------------------
+
+
+class _Pointer:
+    """An NDR pointer, as the bindings produce for a [unique] parameter."""
+
+    def __init__(self, value: object) -> None:
+        self.value = value
+
+    def __repr__(self) -> str:  # what leaked into the interface
+        return "<base.ndr_pointer talloc based object at 0x350f1e20>"
+
+
+class _LsaString:
+    def __init__(self, string: str) -> None:
+        self.string = string
+
+
+def test_an_lsa_string_gives_up_its_text() -> None:
+    assert identity._lsa_text(_LsaString("Administrator")) == "Administrator"
+
+
+def test_a_pointer_is_stepped_through_rather_than_printed() -> None:
+    """The live failure, exactly.
+
+    `samfsconctl check` reported an authority of
+    "<base.ndr_pointer talloc based object at 0x350f1e20>", which then travelled
+    on as half of a qualified name — so an account the console had already
+    identified became one it could not look up.
+    """
+    assert identity._lsa_text(_Pointer(_LsaString("SPAM-DENY"))) == "SPAM-DENY"
+
+
+def test_a_repr_is_never_returned_as_a_value() -> None:
+    """Better nothing than an address in a field printed as a domain."""
+    assert identity._lsa_text(_Pointer(object())) is None
+
+
+def test_plain_text_passes_through() -> None:
+    assert identity._lsa_text("WORKGROUP") == "WORKGROUP"
+    assert identity._lsa_text(b"WORKGROUP") == "WORKGROUP"
+    assert identity._lsa_text(None) is None
+
+
+def test_a_cycle_cannot_hang_the_walk() -> None:
+    """A pointer that points at itself is a bug somewhere, not a reason to spin."""
+    loop = _Pointer(None)
+    loop.value = loop
+    assert identity._lsa_text(loop) is None
