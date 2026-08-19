@@ -233,6 +233,14 @@ def _resolve_trustees(
         # server's own name where there is one, and a usable one where there is
         # not. The other way round, this console would have insisted on "Unix
         # group 0" for something the server calls root.
+        # Whatever the server would not name, in descending order of how much
+        # is actually known about it: a SID the specification names, Samba's
+        # Unix mapping, and finally the SID itself.
+        derived = identity.well_known_name(sid)
+        if derived is not None:
+            trustees.setdefault(trustee, derived)
+            continue
+
         unix = acl.unix_identity(sid)
         if unix is not None:
             trustees.setdefault(trustee, {"sid": sid, "name": None, "unix": unix})

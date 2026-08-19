@@ -150,6 +150,11 @@ export function PermissionEditor({
                 >
                   {trusteeLabel(t, ace.trustee, descriptor.data.trustees[ace.trustee])}
                 </button>
+                {descriptor.data.trustees[ace.trustee]?.derived && (
+                  <span className="perm__derived muted small" title={t('perm.derived.why')}>
+                    {t('perm.derived')}
+                  </span>
+                )}
                 {/* The SID under the name. An ACE naming an account that has
                     since been deleted resolves to nothing, and then the SID is
                     the only thing left to search for. */}

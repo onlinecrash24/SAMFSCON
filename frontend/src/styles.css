@@ -1066,3 +1066,8 @@ fieldset[disabled] { opacity: 0.6; }
   font-size: 0.82em;
   overflow-wrap: anywhere;
 }
+
+/* A name read off the SID rather than returned by the server. Quiet, because
+   it is right — but it is a weaker kind of right, and the difference belongs
+   where somebody deciding a permission can see it. */
+.perm__derived { display: block; font-style: italic; }

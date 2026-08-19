@@ -58,6 +58,97 @@ WELL_KNOWN = (
 )
 
 
+# SIDs whose meaning is fixed by the specification rather than by any one
+# server (MS-DTYP 2.4.2.4). Naming them here is not a cache and not a guess: an
+# LSA lookup that answers returns exactly these names, and one that is refused
+# leaves a column of raw SIDs where the answer was never in doubt.
+_UNIVERSAL_SIDS: dict[str, str] = {
+    "S-1-0-0": "Null",
+    "S-1-1-0": "Everyone",
+    "S-1-2-0": "Local",
+    "S-1-3-0": "Creator Owner",
+    "S-1-3-1": "Creator Group",
+    "S-1-3-4": "Owner Rights",
+    "S-1-5-1": "Dialup",
+    "S-1-5-2": "Network",
+    "S-1-5-3": "Batch",
+    "S-1-5-4": "Interactive",
+    "S-1-5-6": "Service",
+    "S-1-5-7": "Anonymous",
+    "S-1-5-11": "Authenticated Users",
+    "S-1-5-13": "Terminal Server User",
+    "S-1-5-18": "SYSTEM",
+    "S-1-5-19": "Local Service",
+    "S-1-5-20": "Network Service",
+    "S-1-5-32-544": "Administrators",
+    "S-1-5-32-545": "Users",
+    "S-1-5-32-546": "Guests",
+    "S-1-5-32-547": "Power Users",
+    "S-1-5-32-548": "Account Operators",
+    "S-1-5-32-549": "Server Operators",
+    "S-1-5-32-550": "Print Operators",
+    "S-1-5-32-551": "Backup Operators",
+    "S-1-5-32-552": "Replicator",
+}
+
+# The last part of a domain SID, where the specification fixes the meaning even
+# though the domain does not (MS-DTYP 2.4.2.4). "Administrator" is RID 500 in
+# every domain there has ever been.
+_DOMAIN_RIDS: dict[int, str] = {
+    500: "Administrator",
+    501: "Guest",
+    502: "krbtgt",
+    512: "Domain Admins",
+    513: "Domain Users",
+    514: "Domain Guests",
+    515: "Domain Computers",
+    516: "Domain Controllers",
+    517: "Cert Publishers",
+    518: "Schema Admins",
+    519: "Enterprise Admins",
+    520: "Group Policy Creator Owners",
+    553: "RAS and IAS Servers",
+}
+
+
+def well_known_name(sid: str) -> dict[str, Any] | None:
+    """The name a SID has by specification, when it has one.
+
+    Not a substitute for asking the server — the server knows about the accounts
+    only it has, and its answer is the authoritative one. This is what is left
+    when the server will not answer at all, and it covers most of what a file
+    server's descriptors actually contain: Everyone, Creator Owner, the builtin
+    groups, and the domain's own Administrator and Domain Admins.
+
+    Marked as derived so the interface can say where the name came from. A name
+    read off the SID's structure is a different kind of fact from one the server
+    returned, and only one of them proves the account still exists.
+    """
+    text = sid.strip()
+
+    fixed = _UNIVERSAL_SIDS.get(text.upper())
+    if fixed is not None:
+        return {"sid": text, "name": fixed, "derived": True, "type": "well_known_group"}
+
+    # S-1-5-21-<domain>-<rid>: the domain part varies, the RID does not.
+    if text.upper().startswith("S-1-5-21-"):
+        _, _, tail = text.rpartition("-")
+        try:
+            rid = int(tail)
+        except ValueError:
+            return None
+        name = _DOMAIN_RIDS.get(rid)
+        if name is not None:
+            return {
+                "sid": text,
+                "name": name,
+                "derived": True,
+                "type": "user" if rid in (500, 501, 502) else "group",
+            }
+
+    return None
+
+
 def current_account(conn: ServerConnection) -> dict[str, Any]:
     """Who the server thinks is signed in.
 
@@ -151,10 +242,17 @@ def lookup_names(conn: ServerConnection, names: list[str]) -> list[dict[str, Any
     count = 0
 
     try:
+        # Ordered by what a member server most likely implements. The plain
+        # call first because it is the one every generation has; the numbered
+        # variants after it. LookupNames3 takes *no* policy handle — it is the
+        # form used where there is no policy to open — so passing one is a
+        # signature error rather than a call.
         result = _attempt(
-            lambda: pipe.LookupNames3(handle, lsa_names, domains, sids, 1, count, 0, 0),
-            lambda: pipe.LookupNames2(handle, 0, lsa_names, domains, sids, 1, count, 0, 0),
             lambda: pipe.LookupNames(handle, lsa_names, domains, sids, 1, count),
+            lambda: pipe.LookupNames2(
+                handle, len(lsa_names), lsa_names, domains, sids, 1, count, 0, 0
+            ),
+            lambda: pipe.LookupNames3(lsa_names, domains, sids, 1, count, 0, 0),
         )
     except SamfsconError as exc:
         # NT_STATUS_NONE_MAPPED means nothing resolved, which is an answer
@@ -204,10 +302,13 @@ def lookup_sids(conn: ServerConnection, sids: list[str]) -> list[dict[str, Any]]
     count = 0
 
     try:
+        # As above: the plain call first, and LookupSids3 without a handle.
+        # `names` is a TransNameArray for the plain call and a TransNameArray2
+        # for the newer ones, so each candidate builds its own.
         result = _attempt(
-            lambda: pipe.LookupSids3(handle, array, domains, names, 1, count, 0, 0),
+            lambda: pipe.LookupSids(handle, array, domains, lsa.TransNameArray(), 1, count),
             lambda: pipe.LookupSids2(handle, array, domains, names, 1, count, 0, 0),
-            lambda: pipe.LookupSids(handle, array, domains, names, 1, count),
+            lambda: pipe.LookupSids3(array, domains, names, 1, count, 0, 0),
         )
     except SamfsconError as exc:
         if exc.code == "sid_not_resolved":
@@ -343,11 +444,36 @@ def _local_groups(conn: ServerConnection, sid: str) -> list[dict[str, Any]]:
         return [{"sid": f"S-1-5-32-{rid}", "name": None, "type": "alias"} for rid in values]
 
 
-def _attempt(*attempts: Any) -> Any:
-    """Run the first call shape this binding accepts.
+# Errors that mean "not this call shape" rather than "no". A binding whose
+# signature does not match raises TypeError, but a *server* that does not
+# implement a variant answers on the wire — and the answer is indistinguishable
+# from a wrong argument. Both deserve the next candidate.
+#
+# Access denied is deliberately not here. That is the server saying no to the
+# caller, and trying the same question three more ways only asks it three more
+# times.
+_SHAPE_ERRORS = frozenset(
+    {
+        "invalid_parameter",
+        "not_supported",
+        "unsupported_info_level",
+        "server_error",
+    }
+)
 
-    A ``TypeError`` means the signature was wrong and the next shape is worth
-    trying. Anything else came from the server and is translated.
+
+def _attempt(*attempts: Any) -> Any:
+    """Run the first call shape this binding *and this server* accept.
+
+    A ``TypeError`` means the signature was wrong. A handful of server errors
+    mean the same thing from the other end: the LSA lookup calls come in three
+    generations, servers implement different subsets, and the older bindings
+    reject the newer forms in ways that reach the wire before they reach a
+    signature check.
+
+    The first version of this abandoned the chain on any server error, so one
+    rejected variant took the two working ones with it — and every trustee in
+    every descriptor rendered as a bare SID.
     """
     errors: list[str] = []
     for attempt in attempts:
@@ -357,7 +483,11 @@ def _attempt(*attempts: Any) -> Any:
             errors.append(str(exc))
             continue
         except Exception as exc:
-            raise translate(exc) from exc
+            error = translate(exc)
+            if error.code in _SHAPE_ERRORS:
+                errors.append(f"{error.code}: {error.detail or error.message}")
+                continue
+            raise error from exc
 
     raise SamfsconError(
         "This Samba build's LSA bindings have an unexpected signature.",

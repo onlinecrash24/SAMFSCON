@@ -234,6 +234,9 @@ export const de = {
   'perm.raw': 'Sicherheitsdeskriptor (SDDL)',
   'perm.unixUser': 'Unix-Benutzer {id}',
   'perm.unixGroup': 'Unix-Gruppe {id}',
+  'perm.derived': 'aus der SID',
+  'perm.derived.why':
+    'Dieser Name steht so in der Spezifikation — RID 500 ist in jeder Domäne der Administrator. Der Server hat ihn nicht bestätigt, das Konto muss also nicht mehr existieren.',
   'perm.owner': 'Besitzer',
   'perm.group': 'Gruppe',
   'perm.grantsNothing': 'gewährt nichts',
@@ -686,6 +689,9 @@ export const en: Record<MessageKey, string> = {
   'perm.raw': 'Security descriptor (SDDL)',
   'perm.unixUser': 'Unix user {id}',
   'perm.unixGroup': 'Unix group {id}',
+  'perm.derived': 'from the SID',
+  'perm.derived.why':
+    'This name comes from the specification — RID 500 is Administrator in every domain. The server did not confirm it, so the account need not still exist.',
   'perm.owner': 'Owner',
   'perm.group': 'Group',
   'perm.grantsNothing': 'grants nothing',

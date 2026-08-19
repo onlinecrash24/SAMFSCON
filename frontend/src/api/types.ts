@@ -369,6 +369,13 @@ export interface ResolvedTrustee {
   alias?: string
   /** Samba's mapping of a Unix uid or gid into the SID space. */
   unix?: { kind: 'unix_user' | 'unix_group'; id: string }
+  /**
+   * The name was read off the SID's own structure rather than returned by the
+   * server. Correct — RID 500 is Administrator in every domain there has ever
+   * been — but a different kind of fact: only the server's answer proves the
+   * account still exists.
+   */
+  derived?: boolean
   resolved?: boolean
 }
 
