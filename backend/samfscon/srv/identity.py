@@ -201,19 +201,81 @@ def current_account(conn: ServerConnection) -> dict[str, Any]:
     if not name:
         return account
 
-    qualified = f"{authority}\\{name}" if authority else name
-    try:
-        resolved = lookup_names(conn, [qualified])
-    except SamfsconError:
-        return account
-
-    if resolved:
-        account["sid"] = resolved[0].get("sid")
-        account["type"] = resolved[0].get("type")
+    found = _resolve_own_name(conn, name, authority)
+    if found is not None:
+        account["sid"] = found.get("sid")
+        account["type"] = found.get("type")
 
     if account["sid"]:
         account["groups"] = _local_groups(conn, account["sid"])
     return account
+
+
+def _own_name_candidates(conn: ServerConnection, name: str, authority: str | None) -> list[str]:
+    """The spellings worth trying for the signed-in account, best first.
+
+    One spelling was not enough, and the one that was tried is the one that
+    cannot work here. On a **domain member** the LSA account domain is the
+    server itself — ZMB-MEMBER — while the person signed in is a domain
+    account, SPAM-DENY\\Administrator. Qualifying with the account domain asks
+    the server about a local account that does not exist.
+
+    So: what the server itself said first, then the realm's NetBIOS name, then
+    the bare name for a server that qualifies nothing.
+    """
+    candidates: list[str] = []
+
+    def add(value: str | None) -> None:
+        if value and value not in candidates:
+            candidates.append(value)
+
+    add(f"{authority}\\{name}" if authority else None)
+
+    # SPAM-DENY.LOCAL -> SPAM-DENY. A guess, but the well-behaved one: it is
+    # what the NetBIOS name of an AD domain is unless somebody went out of
+    # their way, and the trustee names on this very screen are spelled with it.
+    realm = conn.target.realm
+    if realm:
+        add(f"{realm.split('.')[0]}\\{name}")
+
+    add(f"{conn.target.workgroup}\\{name}" if conn.target.workgroup else None)
+    add(name)
+    return candidates
+
+
+def _resolve_own_name(
+    conn: ServerConnection, name: str, authority: str | None
+) -> dict[str, Any] | None:
+    """Find the signed-in account, trying each spelling until one lands.
+
+    Logs what happened either way. The previous version returned silently on
+    failure, which is how "the signed-in account's SID is unknown" stood in a
+    banner for three rounds of testing without ever saying why — the same
+    silence, in the same shape, as the trustee lookup one function over.
+    """
+    for candidate in _own_name_candidates(conn, name, authority):
+        try:
+            resolved = lookup_names(conn, [candidate])
+        except SamfsconError as exc:
+            logger.warning(
+                "looking up the signed-in account as %r failed (%s): %s",
+                candidate,
+                exc.code,
+                exc.detail or exc.message,
+            )
+            continue
+
+        if resolved and resolved[0].get("sid"):
+            logger.info("the signed-in account resolved as %r", candidate)
+            return resolved[0]
+        logger.info("the server does not know an account called %r", candidate)
+
+    logger.warning(
+        "none of the spellings of %r resolved, so this account's privileges "
+        "cannot be checked",
+        name,
+    )
+    return None
 
 
 def lookup_names(conn: ServerConnection, names: list[str]) -> list[dict[str, Any]]:

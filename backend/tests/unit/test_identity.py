@@ -124,3 +124,57 @@ def test_a_cycle_cannot_hang_the_walk() -> None:
     loop = _Pointer(None)
     loop.value = loop
     assert identity._lsa_text(loop) is None
+
+
+# ---------------------------------------------------------------------------
+# Finding the signed-in account on a domain member
+# ---------------------------------------------------------------------------
+
+
+class _Target:
+    def __init__(self, realm: str | None, workgroup: str | None) -> None:
+        self.realm = realm
+        self.workgroup = workgroup
+
+
+class _Conn:
+    def __init__(self, realm: str | None = None, workgroup: str | None = None) -> None:
+        self.target = _Target(realm, workgroup)
+
+
+def test_the_realm_supplies_a_spelling_the_account_domain_cannot() -> None:
+    r"""The live failure.
+
+    On a domain member the LSA account domain is the server itself —
+    ZMB-MEMBER — while the person signed in is SPAM-DENY\Administrator.
+    Qualifying with the account domain asks about a local account that does not
+    exist, and that was the only spelling this ever tried.
+    """
+    candidates = identity._own_name_candidates(
+        _Conn(realm="SPAM-DENY.LOCAL"), "Administrator", "ZMB-MEMBER"
+    )
+
+    assert r"ZMB-MEMBER\Administrator" in candidates  # what the server said, first
+    assert r"SPAM-DENY\Administrator" in candidates  # what actually resolves
+    assert "Administrator" in candidates  # for a server that qualifies nothing
+
+
+def test_what_the_server_said_is_tried_first() -> None:
+    """It is the only one of these that is not a guess."""
+    candidates = identity._own_name_candidates(
+        _Conn(realm="EXAMPLE.LAN"), "alice", "EXAMPLE"
+    )
+    assert candidates[0] == r"EXAMPLE\alice"
+
+
+def test_no_spelling_is_offered_twice() -> None:
+    """The authority and the realm's first label are often the same word."""
+    candidates = identity._own_name_candidates(
+        _Conn(realm="EXAMPLE.LAN", workgroup="EXAMPLE"), "alice", "EXAMPLE"
+    )
+    assert len(candidates) == len(set(candidates))
+
+
+def test_a_standalone_server_still_gets_its_bare_name() -> None:
+    """No realm, no workgroup, nothing to qualify with — and that is fine."""
+    assert identity._own_name_candidates(_Conn(), "admin", None) == ["admin"]
