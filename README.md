@@ -215,12 +215,24 @@ Kerberos made unnecessary; guessing the other way would wait for a ticket no KDC
 | 1e | Local users and groups on a standalone server (SAMR) | built |
 | 2 | Global server settings, the diagnostics view, share templates | planned |
 
-**Nothing here has yet been verified against a live Samba server.** The unit suite (127 tests)
-covers everything that does not need one — SDDL round-tripping, the two status families, option
-validation, the session-secret guarantees, mode detection — and the CI runs it. The RPC call
-shapes are written against the protocol specifications with a tolerant-signature helper around
-each one, because the Samba python bindings have changed those signatures between releases. That
-helper is a mitigation, not a substitute for the test: see [Verifying it](#verifying-it).
+**Verification against a live server has started, and the sign-in path is the only part it has
+reached.** Against a Samba AD member it found two faults, both since fixed:
+
+- A refused anonymous policy query was read as "this server has no realm", which decided
+  *standalone* for a domain member — so the console tried NTLM with a domain password and reported
+  a logon failure that named the wrong problem. A refused query now decides nothing, and the form
+  asks with the reason attached.
+- The server's own name was only ever derived from the `srvsvc` probe, which a domain member
+  commonly refuses. Without it Kerberos was asked for a ticket for a bare IP address and the
+  connection failed with `NT_STATUS_INVALID_PARAMETER`. The name is now composed from the LSA
+  policy's own two facts, with a reverse DNS lookup as the last resort, and a sign-in that could
+  not possibly work is refused before the password is asked for rather than after.
+
+Everything past the sign-in — shares, permissions, sessions, accounts — is still unproven against a
+real server. The unit suite (136 tests) covers what does not need one, and the CI runs it. The RPC
+call shapes are written against the protocol specifications with a tolerant-signature helper around
+each, because the Samba python bindings have changed those signatures between releases. That helper
+is a mitigation, not a substitute for the test: see [Verifying it](#verifying-it).
 
 ### Shares
 

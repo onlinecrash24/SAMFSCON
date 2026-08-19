@@ -70,20 +70,75 @@ def _decide(**kwargs) -> ServerProbe:
 
 
 def test_a_member_has_accounts_in_a_domain_that_is_not_itself() -> None:
-    probe = _decide(realm="EXAMPLE.LAN", workgroup="EXAMPLE", netbios_name="FS1")
+    probe = _decide(
+        account_policy_read=True,
+        dns_policy_read=True,
+        realm="EXAMPLE.LAN",
+        workgroup="EXAMPLE",
+        netbios_name="FS1",
+    )
     assert probe.mode == MODE_AD_MEMBER
     assert probe.decided is True
 
 
+def test_a_member_gets_the_name_kerberos_will_ask_for() -> None:
+    """Without this the connection falls back to whatever was typed.
+
+    Against a bare address Kerberos cannot build the cifs/<host> principal at
+    all, and the bind fails with NT_STATUS_INVALID_PARAMETER long after the
+    ticket was obtained without complaint. The name is derivable from the two
+    facts the policy query already gave us, so it is derived.
+    """
+    probe = _decide(
+        account_policy_read=True,
+        dns_policy_read=True,
+        realm="EXAMPLE.LAN",
+        workgroup="EXAMPLE",
+        netbios_name="FS1",
+    )
+    assert probe.server_fqdn == "fs1.example.lan"
+
+
 def test_a_standalone_server_is_its_own_account_domain() -> None:
-    probe = _decide(realm="FS1", workgroup="FS1", netbios_name="FS1")
+    probe = _decide(
+        account_policy_read=True,
+        dns_policy_read=True,
+        realm="FS1",
+        workgroup="FS1",
+        netbios_name="FS1",
+    )
     assert probe.mode == MODE_STANDALONE
 
 
-def test_a_server_without_a_realm_cannot_use_kerberos() -> None:
-    """An NT4-style member lands here, and NTLM is genuinely its only option."""
-    probe = _decide(workgroup="WORKGROUP", netbios_name="FS1")
+def test_a_server_that_reports_no_realm_cannot_use_kerberos() -> None:
+    """The DNS level answered and carried no domain — a positive statement.
+
+    An NT4-style member lands here too, and NTLM is genuinely its only option.
+    """
+    probe = _decide(
+        account_policy_read=True,
+        dns_policy_read=True,
+        workgroup="WORKGROUP",
+        netbios_name="FS1",
+    )
     assert probe.mode == MODE_STANDALONE
+
+
+def test_a_refused_dns_query_decides_nothing() -> None:
+    """The regression that made this console try NTLM against a domain member.
+
+    An AD member with `restrict anonymous` answers neither policy query. Reading
+    that silence as "no realm, therefore standalone" produced a sign-in with a
+    domain password over NTLM, a logon failure that named the wrong problem, and
+    an offer to hold a password in memory that Kerberos had made unnecessary.
+
+    A refused query is not an answer. It has to decide nothing.
+    """
+    probe = _decide(account_policy_read=True, netbios_name="FS1")
+
+    assert probe.mode == MODE_AUTO
+    assert probe.decided is False
+    assert any("refused" in note or "by hand" in note for note in probe.notes)
 
 
 def test_a_silent_server_leaves_the_mode_open() -> None:
@@ -92,6 +147,12 @@ def test_a_silent_server_leaves_the_mode_open() -> None:
     assert probe.mode == MODE_AUTO
     assert probe.decided is False
     assert probe.notes  # and it says why, rather than shrugging
+
+
+def test_a_half_answered_policy_decides_nothing() -> None:
+    """One name without the other cannot be compared, so it is not guessed at."""
+    probe = _decide(dns_policy_read=True, realm="EXAMPLE.LAN", workgroup="EXAMPLE")
+    assert probe.mode == MODE_AUTO
 
 
 # ---------------------------------------------------------------------------
@@ -122,6 +183,8 @@ def test_discovery_fills_in_what_the_form_did_not_say(
             host="192.168.1.50",
             reachable=True,
             mode=MODE_AD_MEMBER,
+            account_policy_read=True,
+            dns_policy_read=True,
             realm="EXAMPLE.LAN",
             workgroup="EXAMPLE",
             netbios_name="FS1",
@@ -243,3 +306,102 @@ def test_describe_carries_no_secret() -> None:
     assert described["realm"] == "EXAMPLE.LAN"
     assert "password" not in described
     assert "secret" not in described
+
+
+def test_kerberos_against_a_bare_address_is_refused_before_the_password(
+    monkeypatch: pytest.MonkeyPatch, settings: Settings
+) -> None:
+    """The failure seen against a live AD member, caught where it can be explained.
+
+    Forcing "domain member" against an address whose name could not be learned
+    used to acquire a ticket, then fail at the connect with
+    NT_STATUS_INVALID_PARAMETER — after the password had been typed and sent.
+    There is no arrangement of retries that makes cifs/192.168.1.41 exist, so it
+    is refused up front with what to do instead.
+    """
+    _stub_probe(monkeypatch, ServerProbe(host="192.168.1.41", reachable=True))
+
+    with pytest.raises(InvalidRequest) as caught:
+        targets.resolve_target(
+            settings, server="192.168.1.41", mode=MODE_AD_MEMBER, realm="EXAMPLE.LAN"
+        )
+
+    assert caught.value.code == "kerberos_needs_a_name"
+    assert caught.value.hint is not None
+    assert "extra_hosts" in caught.value.hint
+
+
+def test_a_discovered_name_makes_an_address_usable(
+    monkeypatch: pytest.MonkeyPatch, settings: Settings
+) -> None:
+    """The same sign-in works once the probe supplies the server's own name."""
+    _stub_probe(
+        monkeypatch,
+        ServerProbe(
+            host="192.168.1.41",
+            reachable=True,
+            account_policy_read=True,
+            dns_policy_read=True,
+            mode=MODE_AD_MEMBER,
+            realm="SPAM-DENY.LOCAL",
+            workgroup="SPAM-DENY",
+            netbios_name="FS1",
+            server_fqdn="fs1.spam-deny.local",
+        ),
+    )
+
+    target = targets.resolve_target(settings, server="192.168.1.41")
+    assert target.mode == MODE_AD_MEMBER
+    assert target.kerberos_host == "fs1.spam-deny.local"
+
+
+# ---------------------------------------------------------------------------
+# The name Kerberos needs, from whichever of the three sources answers
+# ---------------------------------------------------------------------------
+
+
+def test_reverse_dns_supplies_a_name_when_the_server_will_not(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The last source, for a server that refuses every anonymous query."""
+    import socket
+
+    monkeypatch.setattr(
+        socket, "gethostbyaddr", lambda address: ("FS1.spam-deny.local.", [], [address])
+    )
+    probe = ServerProbe(host="192.168.1.41", reachable=True)
+    discovery._reverse_lookup(probe)
+
+    assert probe.server_fqdn == "fs1.spam-deny.local"
+    # Said out loud: this name came from DNS, not from the server itself.
+    assert any("reverse DNS" in note for note in probe.notes)
+
+
+def test_reverse_dns_never_overrides_what_the_server_said() -> None:
+    """The server's own account of itself outranks a PTR record."""
+    probe = ServerProbe(host="192.168.1.41", reachable=True, server_fqdn="fs1.example.lan")
+    discovery._reverse_lookup(probe)
+    assert probe.server_fqdn == "fs1.example.lan"
+
+
+def test_reverse_dns_is_not_attempted_for_a_name() -> None:
+    probe = ServerProbe(host="fs1.example.lan", reachable=True)
+    discovery._reverse_lookup(probe)
+    assert probe.server_fqdn is None
+
+
+def test_a_missing_ptr_record_is_reported_rather_than_raised(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A server with no PTR record is common and is not an error."""
+    import socket
+
+    def _fail(address: str):
+        raise OSError("no PTR record")
+
+    monkeypatch.setattr(socket, "gethostbyaddr", _fail)
+    probe = ServerProbe(host="192.168.1.41", reachable=True)
+    discovery._reverse_lookup(probe)
+
+    assert probe.server_fqdn is None
+    assert any("reverse DNS" in note for note in probe.notes)

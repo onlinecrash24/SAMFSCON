@@ -222,13 +222,26 @@ hieße, auf ein Ticket zu warten, das kein KDC ausstellen wird.
 | 1e | Lokale Benutzer und Gruppen auf einem eigenständigen Server (SAMR) | gebaut |
 | 2 | Globale Servereinstellungen, Diagnoseansicht, Freigabevorlagen | geplant |
 
-**Nichts davon ist bisher gegen einen laufenden Samba-Server verifiziert.** Die Unit-Suite (127
-Tests) deckt alles ab, was ohne einen auskommt — SDDL hin und zurück, die beiden Statusfamilien,
-die Optionsvalidierung, die Zusicherungen zum Sitzungspasswort, die Moduserkennung —, und die CI
-führt sie aus. Die Formen der RPC-Aufrufe sind gegen die Protokollspezifikationen geschrieben, jede
-mit einem Helfer umgeben, der mehrere Signaturen durchprobiert, weil die Python-Bindings von Samba
-diese Signaturen zwischen Versionen geändert haben. Dieser Helfer ist eine Abmilderung, kein Ersatz
-für den Test: siehe [Verifikation](#verifikation).
+**Die Verifikation gegen einen laufenden Server hat begonnen und ist bisher nur bis zur Anmeldung
+gekommen.** Gegen ein Samba-AD-Mitglied hat sie zwei Fehler gefunden, beide behoben:
+
+- Eine abgelehnte anonyme Policy-Abfrage wurde als „dieser Server hat keinen Realm“ gelesen und
+  entschied damit *eigenständig* für ein Domänenmitglied — die Konsole versuchte NTLM mit einem
+  Domänenpasswort und meldete einen Anmeldefehler, der das falsche Problem benannte. Eine
+  abgelehnte Abfrage entscheidet jetzt nichts, und das Formular fragt mitsamt Begründung.
+- Der eigene Name des Servers wurde nur aus der `srvsvc`-Abfrage abgeleitet, die ein
+  Domänenmitglied üblicherweise verweigert. Ohne ihn wurde Kerberos nach einem Ticket für eine
+  nackte IP-Adresse gefragt, und die Verbindung scheiterte mit `NT_STATUS_INVALID_PARAMETER`. Der
+  Name wird jetzt aus den beiden Angaben der LSA-Policy zusammengesetzt, mit einem Reverse-DNS-
+  Lookup als letzter Möglichkeit — und eine Anmeldung, die gar nicht funktionieren kann, wird vor
+  der Passwortabfrage abgelehnt statt danach.
+
+Alles hinter der Anmeldung — Freigaben, Berechtigungen, Sitzungen, Konten — ist gegen einen echten
+Server weiterhin unbewiesen. Die Unit-Suite (136 Tests) deckt ab, was ohne einen auskommt, und die
+CI führt sie aus. Die Formen der RPC-Aufrufe sind gegen die Protokollspezifikationen geschrieben,
+jede mit einem Helfer umgeben, der mehrere Signaturen durchprobiert, weil die Python-Bindings von
+Samba diese Signaturen zwischen Versionen geändert haben. Dieser Helfer ist eine Abmilderung, kein
+Ersatz für den Test: siehe [Verifikation](#verifikation).
 
 ### Freigaben
 

@@ -220,6 +220,25 @@ def _require_decision(settings: Settings, target: ServerTarget) -> ServerTarget:
             context={"host": target.host},
         )
 
+    if target.mode == MODE_AD_MEMBER and discovery.is_address(target.kerberos_host):
+        # Refused here rather than at the connect, where it arrives as
+        # NT_STATUS_INVALID_PARAMETER after a ticket was obtained without
+        # complaint. Kerberos issues tickets for cifs/<hostname>; for a bare
+        # address there is no such principal and no amount of retrying makes
+        # one.
+        raise InvalidRequest(
+            "Kerberos needs the server's name, and only its address is known.",
+            code="kerberos_needs_a_name",
+            hint=(
+                "Enter the server's name instead of its address, or let SAMFSCON "
+                "learn it: the name comes from an unauthenticated policy query "
+                "that this server refused. Whichever name is used, the container "
+                "has to be able to resolve it — add it to extra_hosts if DNS does "
+                "not."
+            ),
+            context={"host": target.host, "realm": target.realm},
+        )
+
     if target.mode == MODE_AD_MEMBER and not target.realm:
         raise InvalidRequest(
             "This server was chosen as a domain member, but no Kerberos realm is known.",

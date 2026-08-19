@@ -78,6 +78,9 @@ export function LoginView() {
 
   const allowStandalone = servers?.allow_standalone ?? info?.allow_standalone ?? true
 
+  /** The server this sign-in will go to, whichever way it was chosen. */
+  const currentHost = isCustom ? host.trim() : (profile?.host ?? servers?.default?.host ?? '')
+
   /**
    * Which mode this sign-in will actually use.
    *
@@ -113,6 +116,19 @@ export function LoginView() {
       setProbing(false)
     }
   }
+
+  // A configured or default server gets asked what it is, exactly as a typed
+  // address does. Without this the form showed "detect automatically" with
+  // nothing behind it and let the sign-in find out the hard way — which against
+  // a domain member that answers no anonymous query meant an NTLM attempt with a
+  // domain password, and a logon error that named the wrong problem.
+  useEffect(() => {
+    if (isCustom || !currentHost || probe || probing) return
+    void runProbe(currentHost)
+    // runProbe is stable enough for this: it closes over `choice`, which is in
+    // the dependency list, and any other change resets `probe` to null first.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentHost, isCustom, choice])
 
   function selectServer(value: string) {
     setChoice(value)
@@ -272,7 +288,16 @@ export function LoginView() {
           </select>
         </Field>
 
-        {probe && !probe.decided && <Banner message={t('login.mode.undecided')} tone="warning" />}
+        {probe && !probe.decided && (
+          <Banner
+            message={
+              probe.notes.length > 0
+                ? `${t('login.mode.undecided')} (${probe.notes.join('; ')})`
+                : t('login.mode.undecided')
+            }
+            tone="warning"
+          />
+        )}
 
         {/* The trade, stated where the choice is made. */}
         {effectiveMode === 'standalone' && (

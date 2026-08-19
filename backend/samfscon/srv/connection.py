@@ -135,7 +135,11 @@ class ServerConnection:
 
     @property
     def binding(self) -> str:
-        return binding_string(self.host, encrypt=self.settings.smb_encrypt)
+        return binding_string(
+            self.host,
+            encrypt=self.settings.smb_encrypt,
+            auth="krb5" if self.target.uses_kerberos else "ntlm",
+        )
 
     def pipe(self, name: str) -> Any:
         """The named RPC interface, opened on first use and kept afterwards.
@@ -244,7 +248,11 @@ def connect(session: Any, settings: Settings) -> ServerConnection:
         raise translate(exc) from exc
 
     host = target.kerberos_host if target.uses_kerberos else target.host
-    binding = binding_string(host, encrypt=settings.smb_encrypt)
+    binding = binding_string(
+        host,
+        encrypt=settings.smb_encrypt,
+        auth="krb5" if target.uses_kerberos else "ntlm",
+    )
 
     try:
         srvsvc = _open_pipe(PIPE_SRVSVC, binding, lp, creds)
@@ -362,16 +370,25 @@ def _server_info(raw: Any, target: ServerTarget, host: str) -> ServerInfo:
 # ---------------------------------------------------------------------------
 
 
-def binding_string(host: str, *, encrypt: bool = False) -> str:
+def binding_string(host: str, *, encrypt: bool = False, auth: str | None = None) -> str:
     """An RPC binding for the named-pipe transport over SMB.
 
     ``ncacn_np`` is DCE/RPC over an SMB named pipe — the transport all of these
-    interfaces are published on, and the one Windows itself uses. The options
-    are asked for rather than negotiated down: ``smb2`` keeps SMB1 off the
-    table, ``sign`` protects the traffic's integrity, and ``seal`` adds
-    encryption where the installation wants it.
+    interfaces are published on, and the one Windows itself uses.
+
+    Only options whose spelling is stable across Samba releases go in here.
+    ``sign`` and ``seal`` protect the traffic; ``krb5`` and ``ntlm`` state the
+    authentication rather than leaving it to be inferred from the credentials
+    object, which makes a mismatch fail with something that names itself.
+
+    The SMB dialect is deliberately *not* an option here: it is set once in the
+    loadparm as ``client min protocol``, which is one place rather than two,
+    and a dialect option this build did not recognise would be refused as an
+    invalid parameter — a status that names neither the option nor the value.
     """
-    options = ["smb2", "seal" if encrypt else "sign"]
+    options = ["seal" if encrypt else "sign"]
+    if auth in ("krb5", "ntlm"):
+        options.append(auth)
     return f"ncacn_np:{host}[{','.join(options)}]"
 
 

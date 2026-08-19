@@ -64,6 +64,14 @@ class ServerProbe:
     os_version: str | None = None
     comment: str | None = None
     is_domain_controller: bool = False
+    # Whether the two policy queries were *answered*, which is not the same as
+    # what they said. A refused query and a query that reported no DNS domain
+    # look identical in the fields above and mean opposite things: the first is
+    # "we could not tell", the second is "there genuinely is no realm". Reading
+    # the first as the second is what decided *standalone* for a domain member,
+    # and then offered to hold a password that Kerberos had made unnecessary.
+    account_policy_read: bool = False
+    dns_policy_read: bool = False
     # Why the mode is what it is, and what could not be read. Shown in the
     # sign-in form when the mode stayed undecided, because "pick one" without a
     # reason is the kind of prompt people answer wrongly.
@@ -86,6 +94,8 @@ class ServerProbe:
             "os_version": self.os_version,
             "comment": self.comment,
             "is_domain_controller": self.is_domain_controller,
+            "account_policy_read": self.account_policy_read,
+            "dns_policy_read": self.dns_policy_read,
             "notes": list(self.notes),
         }
 
@@ -155,6 +165,7 @@ def probe(host: str, settings: Settings) -> ServerProbe:
     _probe_lsa(result, lp, creds)
     _probe_srvsvc(result, lp, creds)
     _decide_mode(result)
+    _reverse_lookup(result)
 
     if not result.reachable:
         raise UpstreamUnavailable(
@@ -232,20 +243,25 @@ def _probe_lsa(result: ServerProbe, lp: Any, creds: Any) -> None:
 
     account = _query_policy(pipe, handle, LSA_POLICY_INFO_ACCOUNT_DOMAIN)
     if account is not None:
+        result.account_policy_read = True
         # The account domain of a standalone server is the server itself, which
-        # is exactly what makes the comparison below work.
+        # is exactly what makes the comparison in _decide_mode work.
         result.netbios_name = _text(getattr(getattr(account, "name", None), "string", None))
+    else:
+        result.notes.append("the account-domain policy query was refused")
 
     dns = _query_policy(pipe, handle, LSA_POLICY_INFO_DNS)
-    if dns is not None:
-        result.workgroup = _text(getattr(getattr(dns, "name", None), "string", None))
-        realm = _text(getattr(getattr(dns, "dns_domain", None), "string", None))
-        result.realm = realm.upper() if realm else None
-    elif account is not None:
-        # Without the DNS level there is no realm to be had, but the account
-        # domain still names the workgroup.
-        result.workgroup = result.netbios_name
-        result.notes.append("the server did not report a DNS domain")
+    if dns is None:
+        # Deliberately nothing else. Filling the workgroup in from the account
+        # domain here would make a member server look like its own account
+        # domain — which is the definition of standalone, and wrong.
+        result.notes.append("the DNS-domain policy query was refused")
+        return
+
+    result.dns_policy_read = True
+    result.workgroup = _text(getattr(getattr(dns, "name", None), "string", None))
+    realm = _text(getattr(getattr(dns, "dns_domain", None), "string", None))
+    result.realm = realm.upper() if realm else None
 
 
 def _open_policy(pipe: Any) -> Any:
@@ -337,35 +353,114 @@ def _decide_mode(result: ServerProbe) -> None:
     The test is whether the server's own account domain is the primary domain.
     A standalone server is its own account domain; a member's accounts live in
     the AD domain it joined, and the two names differ.
+
+    **A refused query decides nothing.** That distinction is the whole point of
+    this function. An AD member with `restrict anonymous` answers neither policy
+    query, and reading that silence as "no realm, therefore standalone" is how
+    this console tried to sign in to a domain member with NTLM and a domain
+    password — offering to hold a password in memory that Kerberos had made
+    unnecessary, and failing with a logon error that named the wrong problem.
     """
-    if result.realm and result.workgroup and result.netbios_name:
-        if result.workgroup.upper() != result.netbios_name.upper():
-            result.mode = MODE_AD_MEMBER
-            result.notes.append(
-                f"the server's accounts live in {result.workgroup}, not in itself — "
-                "so it is a domain member"
-            )
-            return
-        result.mode = MODE_STANDALONE
+    if not result.dns_policy_read:
+        result.mode = MODE_AUTO
         result.notes.append(
-            "the server is its own account domain — so it is standalone"
+            "the server answered no unauthenticated policy query, so whether it is "
+            "a domain member has to be chosen by hand"
         )
         return
 
-    if result.workgroup and result.netbios_name:
-        # No DNS domain, so no realm, so Kerberos is not on the table even if
-        # the names differ. An NT4-style domain member lands here, and NTLM is
-        # genuinely the only option for it.
-        result.mode = MODE_STANDALONE
+    if not result.netbios_name or not result.workgroup:
+        result.mode = MODE_AUTO
         result.notes.append(
-            "the server named no Kerberos realm, so it is managed with user name "
-            "and password"
+            "the server named neither its own account domain nor its primary one, "
+            "so its mode has to be chosen by hand"
         )
         return
 
-    result.mode = MODE_AUTO
+    if not result.realm:
+        # The DNS level *was* answered and carried no DNS domain. That is a
+        # positive statement rather than a gap: there is no realm, so there is
+        # no Kerberos, whatever the two NetBIOS names say. An NT4-style member
+        # lands here too, and NTLM is genuinely its only option.
+        result.mode = MODE_STANDALONE
+        result.notes.append(
+            "the server reported no Kerberos realm, so it is managed with a user "
+            "name and password"
+        )
+        return
+
+    if result.workgroup.upper() != result.netbios_name.upper():
+        result.mode = MODE_AD_MEMBER
+        result.notes.append(
+            f"the server's accounts live in {result.workgroup}, not in itself — "
+            "so it is a domain member"
+        )
+        _derive_fqdn(result)
+        return
+
+    result.mode = MODE_STANDALONE
+    result.notes.append("the server is its own account domain — so it is standalone")
+
+
+def _reverse_lookup(result: ServerProbe) -> None:
+    """Ask DNS for the name behind an address, when the server would not say it.
+
+    The last of three sources, in descending order of trust: what the server
+    reported about itself, what its own NetBIOS name and realm compose to, and
+    — only if both were refused — the PTR record. It runs for an address and
+    never for a name, and it never overrides something already known.
+
+    This is deliberately *not* the same thing as Kerberos canonicalisation,
+    which the generated krb5.conf turns off with ``rdns = false``. That setting
+    stops the Kerberos library rewriting a name somebody supplied. This is the
+    opposite direction: nobody supplied a name at all, and a PTR record is the
+    standard way to find one. The name it produces is then used exactly as if it
+    had been typed — and if the KDC has no principal for it, the sign-in fails
+    with a message that names it, which is a far better failure than asking for
+    a ticket for an address.
+    """
+    import socket
+
+    if result.server_fqdn or not is_address(result.host):
+        return
+
+    try:
+        name, _, _ = socket.gethostbyaddr(result.host.strip("[]"))
+    except OSError as exc:
+        result.notes.append(
+            f"no reverse DNS record for {result.host}, so the server's name is unknown ({exc})"
+        )
+        return
+
+    name = name.strip().rstrip(".")
+    if not name or is_address(name):
+        return
+
+    result.server_fqdn = name.lower()
     result.notes.append(
-        "the server answered no unauthenticated query, so its mode has to be chosen by hand"
+        f"the name {result.server_fqdn} came from a reverse DNS lookup, not from the server"
+    )
+
+
+def _derive_fqdn(result: ServerProbe) -> None:
+    """Work out the name a Kerberos ticket has to be asked for.
+
+    Only the srvsvc probe used to set this, and a domain member commonly refuses
+    that one anonymously. Without a name the connection falls back to whatever
+    was typed, and against a bare address Kerberos cannot build the
+    ``cifs/<host>`` principal at all — the bind then fails with
+    NT_STATUS_INVALID_PARAMETER, long after the ticket was obtained without
+    complaint.
+
+    The two facts needed are the ones the LSA policy already gave us: the
+    server's own NetBIOS name and the realm it belongs to.
+    """
+    if result.server_fqdn or not result.netbios_name or not result.realm:
+        return
+    result.server_fqdn = f"{result.netbios_name.lower()}.{result.realm.lower()}"
+    result.notes.append(
+        f"Kerberos will ask for cifs/{result.server_fqdn}; the container has to be "
+        "able to resolve that name"
     )
 
 
@@ -378,12 +473,14 @@ def _binding(host: str) -> str:
     """An RPC binding string for the named pipe transport over SMB.
 
     ``ncacn_np`` is DCE/RPC over an SMB named pipe — the transport every one of
-    these interfaces is published on, and the one Windows itself uses. ``smb2``
-    and ``sign`` are asked for explicitly rather than negotiated down: this
-    console manages shares and permissions, and doing that over an unsigned SMB1
-    connection is not a trade worth offering.
+    these interfaces is published on, and the one Windows itself uses. ``sign``
+    is asked for explicitly rather than negotiated down; the dialect floor comes
+    from the loadparm, so there is one place that decides it rather than two.
+
+    No authentication is named: this runs before anything is known about the
+    server, and the credentials are anonymous.
     """
-    return f"ncacn_np:{host}[smb2,sign]"
+    return f"ncacn_np:{host}[sign]"
 
 
 def _text(value: Any) -> str | None:

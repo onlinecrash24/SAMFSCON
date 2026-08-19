@@ -322,6 +322,9 @@ export const de = {
   'error.samr_password_unsupported': 'Diese Samba-Version unterstützt das Setzen des Passworts nicht.',
 
   // -- errors --------------------------------------------------------------
+  'error.kerberos_needs_a_name': 'Kerberos braucht den Namen des Servers, bekannt ist nur seine Adresse.',
+  'error.kerberos_needs_a_name.hint':
+    'Den Namen des Servers statt seiner Adresse eintragen — oder SAMFSCON ihn lernen lassen: er kommt aus einer unauthentifizierten Policy-Abfrage, die dieser Server abgelehnt hat. Welcher Name auch benutzt wird, der Container muss ihn auflösen können; notfalls über extra_hosts.',
   'error.hint': 'Hinweis',
   'error.details': 'Technische Einzelheiten',
   'error.network_error': 'Der Server ist nicht erreichbar.',
@@ -747,6 +750,9 @@ export const en: Record<MessageKey, string> = {
   'error.password_encryption_failed': 'The password could not be encrypted for transport.',
   'error.samr_password_unsupported': 'This Samba build does not support setting the password.',
 
+  'error.kerberos_needs_a_name': 'Kerberos needs the server’s name, and only its address is known.',
+  'error.kerberos_needs_a_name.hint':
+    'Enter the server’s name instead of its address, or let SAMFSCON learn it: the name comes from an unauthenticated policy query that this server refused. Whichever name is used, the container has to be able to resolve it — add it to extra_hosts if DNS does not.',
   'error.hint': 'Hint',
   'error.details': 'Technical detail',
   'error.network_error': 'The server could not be reached.',
