@@ -214,3 +214,37 @@ def test_every_boolean_option_declares_a_default() -> None:
     for option in shareconf.CATALOGUE:
         if option.type == shareconf.TYPE_BOOL:
             assert option.default in ("yes", "no"), f"{option.name} has no usable default"
+
+
+# ---------------------------------------------------------------------------
+# What "the share is not there" looks like on the wire
+# ---------------------------------------------------------------------------
+
+
+def test_an_unused_name_reads_as_missing_not_as_invalid() -> None:
+    """Samba answers WERR_INVALID_NAME for a share that does not exist.
+
+    _srvsvc_NetShareGetInfo returns it when find_service() comes up empty, so a
+    perfectly good name that is simply unused arrives as "invalid name". The
+    existence check treated that as a refusal and raised, NetShareAdd was never
+    reached, and every attempt to create a share told the person their name was
+    not allowed — right after they typed "test".
+    """
+    from samfscon.core.errors import translate
+    from samfscon.srv import shares
+
+    assert shares._missing(translate(RuntimeError("WERR_INVALID_NAME"))) is True
+    assert shares._missing(translate(RuntimeError("WERR_NERR_NETNAMENOTFOUND"))) is True
+
+
+def test_a_refusal_is_still_a_refusal() -> None:
+    """A share we may not look at is not a share that is not there.
+
+    Reading it as absent would let a creation proceed and fail again one call
+    later, less clearly.
+    """
+    from samfscon.core.errors import translate
+    from samfscon.srv import shares
+
+    assert shares._missing(translate(RuntimeError("WERR_ACCESS_DENIED"))) is False
+    assert shares._missing(translate(RuntimeError("NT_STATUS_ACCESS_DENIED"))) is False

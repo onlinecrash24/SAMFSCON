@@ -131,7 +131,14 @@ def get_share(conn: ServerConnection, name: str) -> Share:
     try:
         raw = conn.srvsvc.NetShareGetInfo(None, name, 2)
     except Exception as exc:
-        raise translate(exc) from exc
+        error = translate(exc)
+        if _missing(error):
+            raise NotFound(
+                "The share does not exist on this server.",
+                code="share_not_found",
+                context={"share": name},
+            ) from exc
+        raise error from exc
 
     share = _from_srvsvc(raw)
     if not share.name:
@@ -384,12 +391,27 @@ def _max_users(value: Any) -> int | None:
     return number
 
 
+# What NetShareGetInfo answers for a share that is not there.
+#
+# `WERR_INVALID_NAME` is in this list and it looks wrong. It is not: Samba's
+# _srvsvc_NetShareGetInfo returns it when find_service() comes up empty, so a
+# name that is perfectly valid and simply unused produces "invalid name". Every
+# attempt to create a share died on that — the existence check treated it as a
+# refusal and raised, and NetShareAdd was never reached. The message then
+# complained about a name the person had just typed correctly.
+_SHARE_MISSING = frozenset({"share_not_found", "not_found", "invalid_name"})
+
+
+def _missing(error: Any) -> bool:
+    return error.status_code == 404 or error.code in _SHARE_MISSING
+
+
 def _exists(conn: ServerConnection, name: str) -> bool:
     try:
         conn.srvsvc.NetShareGetInfo(None, name, 1)
     except Exception as exc:  # anything but success means "not there"
         error = translate(exc)
-        if error.status_code == 404 or error.code in ("share_not_found", "not_found"):
+        if _missing(error):
             return False
         # A refusal is not an absence. Reporting it as one would let a create
         # proceed and fail again, less clearly, one call later.
