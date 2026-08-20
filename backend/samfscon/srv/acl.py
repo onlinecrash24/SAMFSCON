@@ -249,6 +249,108 @@ def parse(sddl: str) -> SecurityDescriptor:
     )
 
 
+# The SDDL aliases that are a RID against a domain rather than a whole SID
+# (MS-DTYP 2.4.2.4). ``DA`` is 512 in *some* domain; which one is not in the
+# text, it is an argument to the parser. Parsed against the wrong domain every
+# one of these yields a well-formed SID that belongs to nobody — no error, no
+# warning, just an entry for an account that does not exist.
+#
+# Kept apart from SDDL_ALIASES above, which is for display. These are the ones
+# a write has to be careful about, and the rights aliases share letters with
+# them (``DC`` is Delete Child in a rights field and Domain Computers in a
+# trustee field), so they are only ever matched against a parsed trustee.
+DOMAIN_RELATIVE_ALIASES = frozenset(
+    {
+        "DA",  # Domain Admins
+        "DU",  # Domain Users
+        "DG",  # Domain Guests
+        "DD",  # Domain Controllers
+        "DC",  # Domain Computers
+        "EA",  # Enterprise Admins
+        "SA",  # Schema Admins
+        "CA",  # Cert Publishers
+        "PA",  # Group Policy Creator Owners
+        "RS",  # RAS Servers
+        "RO",  # Enterprise Read-only Domain Controllers
+        "CN",  # Cloneable Domain Controllers
+        "AP",  # Protected Users
+        "KA",  # Key Admins
+        "EK",  # Enterprise Key Admins
+        "LA",  # the domain's built-in Administrator, RID 500
+        "LG",  # the domain's built-in Guest, RID 501
+    }
+)
+
+
+def domain_relative_trustees(sddl: str) -> list[str]:
+    """Which domain-relative aliases this descriptor names, in order.
+
+    Found by parsing rather than by scanning the text: an alias only means an
+    account in the owner, the group, or an ACE's trustee field, and the same
+    two letters mean a right somewhere else.
+    """
+    descriptor = parse(sddl)
+    candidates = [descriptor.owner, descriptor.group]
+    candidates.extend(ace.trustee for ace in descriptor.aces)
+
+    found: list[str] = []
+    for candidate in candidates:
+        token = (candidate or "").strip().upper()
+        if token in DOMAIN_RELATIVE_ALIASES and token not in found:
+            found.append(token)
+    return found
+
+
+def to_descriptor(conn: ServerConnection, sddl: str) -> Any:
+    """Turn SDDL from the client into a descriptor, against the right domain.
+
+    Both write paths come through here — the share descriptor and the file one
+    — because both take SDDL as text from whoever is at the keyboard, and both
+    hints in this codebase invite them to paste it from ``smbcacls`` or
+    ``net rpc share getsecurity``. Output from either can contain ``DA``.
+
+    The domain the aliases belong to is asked of the server. If it will not say
+    and the descriptor needs one, this refuses instead of substituting a domain
+    it happens to have: expanding ``DA`` against BUILTIN yields S-1-5-32-512,
+    which is a valid SID, is nobody, and would be written without complaint.
+    Refusing is worse to read and better to live with — the alternative is a
+    permission change that reports success and grants nothing.
+    """
+    from samba.dcerpc import security
+
+    from samfscon.srv import identity
+
+    relative = domain_relative_trustees(sddl)
+    domain = identity.domain_sid(conn)
+
+    if relative and domain is None:
+        raise InvalidRequest(
+            "This server does not say which domain these entries belong to.",
+            code="sddl_domain_unknown",
+            detail=", ".join(relative),
+            hint=(
+                "The descriptor names " + ", ".join(relative) + ", which SDDL "
+                "writes as a number relative to a domain rather than as a whole "
+                r"SID. Write the SID out in full instead — `wbinfo -n 'DOMAIN\Domain "
+                "Admins'` prints it — or pick the account from the list."
+            ),
+            context={"aliases": relative},
+        )
+
+    # With no relative alias in it the domain is never consulted, so an
+    # unknown one costs nothing and BUILTIN stands in as the argument the
+    # signature insists on.
+    try:
+        return security.descriptor.from_sddl(sddl, security.dom_sid(domain or "S-1-5-32"))
+    except Exception as exc:
+        raise InvalidRequest(
+            "This is not a valid security descriptor.",
+            code="invalid_sddl",
+            detail=str(exc),
+            hint="Check the SDDL — smbcacls prints the same format for comparison.",
+        ) from exc
+
+
 def _parse_ace(text: str) -> Ace | None:
     parts = text.split(";")
     if len(parts) < 6:
@@ -597,16 +699,7 @@ def write_path_sddl(
     from samfscon.core.errors import translate
 
     tree = conn.tree(share)
-
-    try:
-        descriptor = security.descriptor.from_sddl(sddl, security.dom_sid("S-1-5-32"))
-    except Exception as exc:
-        raise InvalidRequest(
-            "This is not a valid security descriptor.",
-            code="invalid_sddl",
-            detail=str(exc),
-            hint="Check the SDDL — smbcacls prints the same format for comparison.",
-        ) from exc
+    descriptor = to_descriptor(conn, sddl)
 
     info = security.SECINFO_OWNER | security.SECINFO_GROUP | security.SECINFO_DACL
     if protected:

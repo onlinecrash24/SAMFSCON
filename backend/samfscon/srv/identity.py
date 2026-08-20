@@ -271,8 +271,7 @@ def _resolve_own_name(
         logger.info("the server does not know an account called %r", candidate)
 
     logger.warning(
-        "none of the spellings of %r resolved, so this account's privileges "
-        "cannot be checked",
+        "none of the spellings of %r resolved, so this account's privileges cannot be checked",
         name,
     )
     return None
@@ -442,6 +441,86 @@ def well_known(conn: ServerConnection) -> list[dict[str, Any]]:
 # ---------------------------------------------------------------------------
 # Binding details, isolated
 # ---------------------------------------------------------------------------
+
+
+# Info levels for QueryInfoPolicy. The same two discovery.py asks for, because
+# they answer different questions: level 5 is the domain the server's own
+# accounts live in, level 12 the AD domain it is joined to.
+LSA_POLICY_INFO_ACCOUNT_DOMAIN = 5
+LSA_POLICY_INFO_DNS = 12
+
+
+def domain_sid(conn: ServerConnection) -> str | None:
+    """The domain SID that SDDL's domain-relative aliases are relative to.
+
+    SDDL writes some trustees as a RID against a domain rather than as a whole
+    SID: ``DA`` is 512 in some domain, ``DU`` is 513, ``LA`` is 500. Which
+    domain is not in the text — it is an argument to the parser, and getting it
+    wrong produces a SID that is perfectly well-formed and belongs to nobody.
+
+    On a domain member the answer is the AD domain, so level 12 is asked first:
+    ``DA`` in pasted SDDL means the domain's administrators, not the member
+    server's. On a standalone server there is no level 12 and the account
+    domain *is* the server, which is the same answer by a different route.
+
+    ``None`` when the server refuses both, which is a thing servers do — see
+    the callers, which then decline to guess rather than expanding the aliases
+    against whatever is at hand.
+    """
+    cached = getattr(conn, "_domain_sid", "unset")
+    if cached != "unset":
+        return cached
+
+    sid = None
+    try:
+        handle = _policy_handle(conn, LSA_POLICY_VIEW_LOCAL_INFORMATION)
+        for level in (LSA_POLICY_INFO_DNS, LSA_POLICY_INFO_ACCOUNT_DOMAIN):
+            try:
+                info = _attempt(
+                    lambda h=handle, k=level: conn.lsa.QueryInfoPolicy2(h, k),
+                    lambda h=handle, k=level: conn.lsa.QueryInfoPolicy(h, k),
+                )
+            except Exception:  # a refused level is not a failure
+                logger.debug("LSA policy level %d was refused", level, exc_info=True)
+                continue
+
+            found = _policy_sid(info)
+            if found:
+                sid = found
+                break
+    except Exception:  # a probe must not break the console
+        logger.debug("the domain SID could not be read", exc_info=True)
+
+    if sid is None:
+        logger.info("this server does not say which domain it belongs to")
+
+    conn._domain_sid = sid  # the cache belongs to the connection
+    return sid
+
+
+def _policy_sid(info: Any) -> str | None:
+    """The SID out of a policy reply, whichever level it came from.
+
+    The reply is a union, and which arm carries the answer depends on the level
+    asked for — so the members are tried by name rather than assumed, the same
+    way every other union in this codebase is read.
+    """
+    candidates = [info]
+    for member in ("dns", "account_domain", "domain", "info5", "info12"):
+        value = getattr(info, member, None)
+        if value is not None:
+            candidates.append(value)
+
+    for candidate in candidates:
+        sid = getattr(candidate, "sid", None)
+        if sid is None:
+            continue
+        text = str(sid)
+        # A machine that answers with an empty or nonsense SID has answered
+        # nothing; S-1-0-0 is the null SID and means exactly that.
+        if text.startswith("S-1-") and text != "S-1-0-0":
+            return text
+    return None
 
 
 def _policy_handle(conn: ServerConnection, access: int) -> Any:

@@ -324,3 +324,38 @@ def test_an_entry_that_grants_nothing_survives_the_round_trip() -> None:
 
     assert len(twice.aces) == len(once.aces)
     assert [entry.mask for entry in twice.aces] == [entry.mask for entry in once.aces]
+
+
+# ---------------------------------------------------------------------------
+# Aliases that are a RID, not a SID
+# ---------------------------------------------------------------------------
+
+
+def test_a_descriptor_of_whole_sids_needs_no_domain() -> None:
+    """Nothing to expand means nothing to get wrong."""
+    assert acl.domain_relative_trustees("O:BAG:BAD:(A;;FA;;;WD)(A;;0x1200a9;;;BU)") == []
+
+
+def test_domain_relative_aliases_are_found_wherever_they_stand() -> None:
+    """Owner, group and trustee are three places one can hide."""
+    found = acl.domain_relative_trustees("O:DAG:DUD:(A;;FA;;;BA)(A;;FR;;;DG)")
+    assert found == ["DA", "DU", "DG"]
+
+
+def test_the_same_alias_is_reported_once() -> None:
+    assert acl.domain_relative_trustees("O:DAG:DAD:(A;;FA;;;DA)") == ["DA"]
+
+
+def test_the_rights_field_is_not_searched_for_trustees() -> None:
+    """DC is Delete Child here and Domain Computers two fields along.
+
+    The letters are shared, so a text scan would refuse a descriptor that is
+    perfectly fine. Only a parsed trustee counts.
+    """
+    assert acl.domain_relative_trustees("D:(A;;DCLCRPWD;;;BA)") == []
+    assert acl.domain_relative_trustees("D:(A;;DCLCRPWD;;;DC)") == ["DC"]
+
+
+def test_the_local_administrator_alias_counts_as_domain_relative() -> None:
+    """LA is RID 500 of a domain, not a fixed SID — the same trap as DA."""
+    assert acl.domain_relative_trustees("D:(A;;FA;;;LA)") == ["LA"]

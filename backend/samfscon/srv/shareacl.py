@@ -63,20 +63,14 @@ def write(conn: ServerConnection, share: str, sddl: str) -> None:
     through. Writing 502 back would mean re-sending every other field and
     trusting that what was read a moment ago is still current.
     """
-    from samba.dcerpc import security, srvsvc
+    from samba.dcerpc import srvsvc
     from samba.ndr import ndr_pack
 
-    from samfscon.core.errors import InvalidRequest
-
-    try:
-        descriptor = security.descriptor.from_sddl(sddl, security.dom_sid("S-1-5-32"))
-    except Exception as exc:
-        raise InvalidRequest(
-            "This is not a valid security descriptor.",
-            code="invalid_sddl",
-            detail=str(exc),
-            hint="Check the SDDL — `net rpc share getsecurity` prints the same format.",
-        ) from exc
+    # Parsed against the domain the server names, not against BUILTIN. A share
+    # descriptor is the one people are most likely to paste in from
+    # `net rpc share getsecurity`, and its output can carry DA — see
+    # acl.to_descriptor for what that costs when the domain is guessed.
+    descriptor = acl.to_descriptor(conn, sddl)
 
     info = srvsvc.sec_desc_buf()
     packed = ndr_pack(descriptor)

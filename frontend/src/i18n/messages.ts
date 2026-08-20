@@ -306,6 +306,10 @@ export const de = {
   'error.no_dacl': 'Der Sicherheitsdeskriptor hat keine Zugriffsliste.',
   'error.no_dacl.hint': 'Ein Deskriptor ohne sie gewährt niemandem etwas.',
   'error.invalid_sddl': 'Das ist kein gültiger Sicherheitsdeskriptor.',
+  'error.sddl_domain_unknown':
+    'Dieser Server sagt nicht, zu welcher Domäne diese Einträge gehören.',
+  'error.sddl_domain_unknown.hint':
+    'Kürzel wie DA oder DU sind in SDDL keine vollständigen SIDs, sondern eine Nummer relativ zu einer Domäne. Welche gemeint ist, war nicht zu erfahren — und geraten würde daraus ein gültiger SID, der zu niemandem gehört. Schreiben Sie den SID vollständig aus oder wählen Sie das Konto aus der Liste.',
   'error.unknown_preset': 'Unbekannte Berechtigungsstufe.',
   'error.sddl_unrenderable': 'Der Sicherheitsdeskriptor ließ sich nicht darstellen.',
   'error.srvsvc_unsupported': 'Diese Samba-Version unterstützt den Aufruf nicht.',
@@ -783,6 +787,10 @@ export const en: Record<MessageKey, string> = {
   'error.no_dacl': 'The security descriptor has no access list.',
   'error.no_dacl.hint': 'A descriptor without one grants nothing to anybody.',
   'error.invalid_sddl': 'This is not a valid security descriptor.',
+  'error.sddl_domain_unknown':
+    'This server does not say which domain these entries belong to.',
+  'error.sddl_domain_unknown.hint':
+    'Aliases like DA or DU are not whole SIDs in SDDL — they are a number relative to a domain. Which domain could not be learned, and a guess would produce a valid SID belonging to nobody. Write the SID out in full, or pick the account from the list.',
   'error.unknown_preset': 'Unknown permission level.',
   'error.sddl_unrenderable': 'The security descriptor could not be rendered.',
   'error.srvsvc_unsupported': 'This Samba build does not support the call.',
