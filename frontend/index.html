@@ -11,6 +11,13 @@
   </head>
   <body>
     <div id="root"></div>
+    <!-- Where dialogs, windows and menus are portalled to. Outside #root on
+         purpose: an overlay rendered inside a positioned window would resolve
+         its z-index within that window and paint underneath the one in front.
+         Missing, everything still works — React falls back to document.body —
+         right up until a dialog opens from a window, which is the worst way
+         for a thing to be absent. -->
+    <div id="overlays"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

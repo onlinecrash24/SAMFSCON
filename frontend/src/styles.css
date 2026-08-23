@@ -1,6 +1,14 @@
 /* SAMFSCON — three-pane console layout, light and dark. */
 
 :root {
+  /* The one declaration that tells the browser this page has a dark half.
+     Without it the browser assumes light and paints everything it draws
+     itself that way: the scrollbars, and every control it owns — a date
+     field in a property sheet comes out white on a dark panel. Two values,
+     not one, because the palette below follows the reader's preference
+     rather than choosing for them. */
+  color-scheme: light dark;
+
   --bg: #f4f5f7;
   --surface: #ffffff;
   --surface-alt: #fafbfc;
