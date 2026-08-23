@@ -22,13 +22,29 @@ license = { text = "AGPL-3.0-or-later" }
 # it comes from the distribution and must not be pulled from PyPI:
 #   * samba (python3-samba) — no PyPI equivalent exists, and it is what every
 #     protocol in this application is spoken through.
+# The floors are what a pinned install would get, and they are audited as such
+# in CI. They were not, until the audit ran for the first time and found
+# sixteen advisories under them — none of which an audit of the *installed*
+# packages could ever have seen, because `>=` resolves to the newest release
+# and a fresh build was therefore never exposed. What is exposed is a machine
+# that installed months ago, and anyone pinning from these constraints.
 dependencies = [
-    "fastapi>=0.115",
-    "uvicorn[standard]>=0.30",
-    "pydantic>=2.7",
-    "pydantic-settings>=2.3",
-    "python-multipart>=0.0.9",
+    "fastapi>=0.141.1",
+    # Declared even though fastapi brings it, for two reasons: it is imported
+    # directly (api/v1/servers.py uses run_in_threadpool), so it belongs here
+    # anyway; and fastapi's own floor permits starlette versions carrying eight
+    # advisories. Ours has to be its own.
+    "starlette>=1.6.0",
+    "uvicorn[standard]>=0.52.1",
+    "pydantic>=2.13.4",
+    "pydantic-settings>=2.15.0",
 ]
+
+# Removed rather than raised: python-multipart. It was declared from the start
+# and nothing ever used it — this application has no endpoint that takes a
+# multipart body, no UploadFile, no Form. Seven of the sixteen advisories were
+# against its floor, and raising the floor of something nothing imports would
+# have been maintaining a dependency for the sake of the audit passing.
 
 [project.optional-dependencies]
 dev = [
