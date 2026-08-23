@@ -166,19 +166,33 @@ _NT_STATUS: dict[str, tuple[type[SamfsconError], str, str, str | None]] = {
         "The password must be changed before this account can be used.",
         None,
     ),
+    # One code, one hint — see the note above _WERROR. Three entries shared
+    # this code and carried three different hints, two of them about managing
+    # shares, and the interface translates by code: creating a folder was
+    # answered with advice to grant SeDiskOperatorPrivilege, which cannot
+    # create a folder. Advice about one cause belongs where that cause is
+    # known, which is the call site — diagnostics.require_share_management and
+    # its neighbours, which run before the call rather than guessing after it.
     "NT_STATUS_ACCESS_DENIED": (
         PermissionDenied,
         "insufficient_access",
-        "Access denied.",
-        "Your account lacks the required permission on the target.",
+        "The server refused this operation for your account.",
+        (
+            "The server did not say which permission is missing, and which one "
+            "it is depends on what was attempted: write access on the parent "
+            "directory for a file or folder, SeDiskOperatorPrivilege for a "
+            "share, write access to the registry for the configuration."
+        ),
     ),
     "NT_STATUS_NETWORK_ACCESS_DENIED": (
         PermissionDenied,
         "insufficient_access",
         "The server refused this operation for your account.",
         (
-            "Managing shares needs SeDiskOperatorPrivilege on the file server: "
-            "net rpc rights grant '<group>' SeDiskOperatorPrivilege -U <admin>"
+            "The server did not say which permission is missing, and which one "
+            "it is depends on what was attempted: write access on the parent "
+            "directory for a file or folder, SeDiskOperatorPrivilege for a "
+            "share, write access to the registry for the configuration."
         ),
     ),
     "NT_STATUS_OBJECT_NAME_NOT_FOUND": (
@@ -331,8 +345,10 @@ _WERROR: dict[str, tuple[type[SamfsconError], str, str, str | None]] = {
         "insufficient_access",
         "The server refused this operation for your account.",
         (
-            "Managing shares needs SeDiskOperatorPrivilege on the file server: "
-            "net rpc rights grant '<group>' SeDiskOperatorPrivilege -U <admin>"
+            "The server did not say which permission is missing, and which one "
+            "it is depends on what was attempted: write access on the parent "
+            "directory for a file or folder, SeDiskOperatorPrivilege for a "
+            "share, write access to the registry for the configuration."
         ),
     ),
     "WERR_FILE_NOT_FOUND": (
@@ -411,7 +427,10 @@ _WERROR: dict[str, tuple[type[SamfsconError], str, str, str | None]] = {
     ),
     "WERR_NERR_USERNOTFOUND": (
         NotFound,
-        "user_not_found",
+        # 404 and its own code. `user_not_found` is the sign-in one and
+        # is a 401; sharing it meant one code carried two statuses, and
+        # the status is how the interface decides what has happened.
+        "account_not_found",
         "No such account on this server.",
         None,
     ),
@@ -449,7 +468,12 @@ _KRB_PATTERNS: list[tuple[re.Pattern[str], type[SamfsconError], str, str, str | 
     (
         re.compile(r"\bclient\b.*?not found in kerberos database", re.I),
         AuthenticationError,
-        "user_not_found",
+        # Its own code, not `user_not_found`. The advice below is about
+        # how a principal is spelt at sign-in, and the accounts console
+        # raised the same code for "this server has no such local
+        # account" — where it read as an instruction to sign in
+        # differently.
+        "kerberos_principal_unknown",
         "No such account in this realm.",
         "Sign in as user@REALM and check the realm spelling.",
     ),

@@ -379,7 +379,7 @@ function GlobalOptionField({
     // read may well set it — so a checkbox drawn from Samba's default would be
     // asserting this server's value from something that says nothing about it.
     return (
-      <div className="field">
+      <div className="config__option">
         <label className="checkbox">
           <input
             type="checkbox"
@@ -411,7 +411,7 @@ function GlobalOptionField({
     // somebody chose — the server's configuration lost to a dropdown.
     const unlisted = stored && !spec.choices.includes(value)
     return (
-      <>
+      <div className="config__option">
         <Field label={spec.name} hint={spec.doc}>
           <select
             value={value}
@@ -432,12 +432,12 @@ function GlobalOptionField({
           </select>
         </Field>
         {under}
-      </>
+      </div>
     )
   }
 
   return (
-    <>
+    <div className="config__option">
       <Field label={spec.name} hint={spec.doc}>
         <input
           type={spec.type === 'int' ? 'number' : 'text'}
@@ -451,7 +451,7 @@ function GlobalOptionField({
         />
       </Field>
       {under}
-    </>
+    </div>
   )
 }
 
@@ -497,8 +497,10 @@ function LiveRows({
   if (here.length === 0) return null
 
   return (
-    <dl className="kv">
-      {here.map((value) => (
+    <section className="detail__section">
+      <h3>{t('config.live.heading')}</h3>
+      <dl className="kv">
+        {here.map((value) => (
         <div key={value.option}>
           <dt className="mono">{value.option}</dt>
           <dd>
@@ -512,9 +514,10 @@ function LiveRows({
               {!value.readable ? ` · ${t('config.live.unreadable')}` : ''}
             </span>
           </dd>
-        </div>
-      ))}
-    </dl>
+          </div>
+        ))}
+      </dl>
+    </section>
   )
 }
 

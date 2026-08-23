@@ -1159,3 +1159,13 @@ body.is-resizing { cursor: col-resize; user-select: none; }
 /* The read notes, one per line and quiet. They are what could not be looked at,
    which is not a finding about the server and must not be styled like one. */
 .config .notes { list-style: none; margin: 0 0 8px; padding: 0; }
+
+/* One option is one block. The badges and the reference line used to be
+   siblings of the field, so they landed in its bottom margin and read as the
+   opening of the *next* option — the effect line under `server string` looked
+   like a statement about `workgroup`. A rule with thirty-seven of them stacked
+   flat is also a wall, and the separator is what makes it a list. */
+.config__option { padding: 10px 0; border-bottom: 1px solid var(--border); }
+.config__option:last-child { border-bottom: none; }
+.config__option .field { margin-bottom: 4px; }
+.config__option .checkbox { margin-top: 0; }

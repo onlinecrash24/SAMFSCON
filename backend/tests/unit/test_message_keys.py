@@ -140,6 +140,29 @@ def test_the_two_families_are_both_present_and_stay_apart() -> None:
     assert len(set(g.UNDECIDABLE_CONFIRM_FOR.values())) == len(g.UNDECIDABLE_CONFIRM_FOR)
 
 
+def test_every_status_the_server_maps_has_a_message() -> None:
+    """Not only the settings module: the whole translation table.
+
+    Every code in it reaches a reader through `error.<code>`, and a code with
+    no entry falls back to the server's English. All 35 have one today, which
+    is what makes this worth asserting — the next one added will not, and the
+    fallback is silent.
+    """
+    from samfscon.core import errors
+
+    codes = set()
+    for table in (errors._NT_STATUS, errors._WERROR):
+        for _symbol, (_cls, code, _message, _hint) in table.items():
+            codes.add(code)
+    for _pattern, _cls, code, _message, _hint in errors._KRB_PATTERNS:
+        codes.add(code)
+
+    present = both()
+    assert len(codes) > 20, "the tables were not read, which is not a pass"
+    missing = [code for code in sorted(codes) if f"error.{code}" not in present]
+    assert not missing, f"no message for: {', '.join(missing)}"
+
+
 def test_the_two_catalogues_hold_the_same_keys() -> None:
     """MessageKey derives from the German one, so this is what the type cannot see.
 

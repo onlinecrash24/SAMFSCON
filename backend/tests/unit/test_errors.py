@@ -158,3 +158,110 @@ def test_error_payload_carries_hint_and_context() -> None:
         "hint": "grant it",
         "context": {"holders": ["Admins"]},
     }
+
+
+def test_one_code_never_carries_two_hints() -> None:
+    """The invariant the note above _WERROR states, asserted rather than hoped.
+
+    The interface translates by code: `error.<code>` and `error.<code>.hint`.
+    So a code that means two things in two entries can only be given one
+    sentence, and whichever one is written down is then shown for both. Three
+    entries shared `insufficient_access` and two of them advised granting
+    SeDiskOperatorPrivilege — which is right for managing a share and cannot
+    create a folder, so that is what the folder dialog said.
+
+    Advice about a specific cause belongs at the call site that knows the
+    cause, not in a table that only knows the status number.
+    """
+    from collections import defaultdict
+
+    from samfscon.core import errors
+
+    hints: dict[str, set[str]] = defaultdict(set)
+    for table in (errors._NT_STATUS, errors._WERROR):
+        for _symbol, (_cls, code, _message, hint) in table.items():
+            if hint is not None:
+                hints[code].add(hint)
+    # The Kerberos patterns too: they answer the same interface with the same
+    # keys, and one of them carried sign-in advice under a code the accounts
+    # console also raised.
+    for _pattern, _cls, code, _message, hint in errors._KRB_PATTERNS:
+        if hint is not None:
+            hints[code].add(hint)
+
+    conflicting = {code: sorted(found) for code, found in hints.items() if len(found) > 1}
+    assert not conflicting, f"one code, two hints: {sorted(conflicting)}"
+
+
+def test_one_code_never_carries_two_classes() -> None:
+    """The same rule for the status: 403 and 404 for one code would leave the
+    interface deciding what happened from a number that changes underneath it."""
+    from collections import defaultdict
+
+    from samfscon.core import errors
+
+    classes: dict[str, set[str]] = defaultdict(set)
+    for table in (errors._NT_STATUS, errors._WERROR):
+        for _symbol, (cls, code, _message, _hint) in table.items():
+            classes[code].add(cls.__name__)
+    for _pattern, cls, code, _message, _hint in errors._KRB_PATTERNS:
+        classes[code].add(cls.__name__)
+
+    conflicting = {code: sorted(found) for code, found in classes.items() if len(found) > 1}
+    assert not conflicting, f"one code, two classes: {sorted(conflicting)}"
+
+
+def test_a_refused_mkdir_says_what_it_actually_needs() -> None:
+    """The refusal an administrator saw, and the advice that could not help.
+
+    Creating a folder inside a share is an ordinary file access. It was
+    answered with the generic access-denied hint, which advised granting
+    SeDiskOperatorPrivilege — a privilege that governs managing shares and
+    cannot create a folder. Following it grants a broad right and leaves the
+    original problem exactly where it was.
+    """
+    import pytest
+
+    from samfscon.core.errors import PermissionDenied
+    from samfscon.srv import files
+
+    class Tree:
+        def mkdir(self, _path):
+            raise RuntimeError("NT_STATUS_ACCESS_DENIED")
+
+    class Conn:
+        def tree(self, _share):
+            return Tree()
+
+    with pytest.raises(PermissionDenied) as raised:
+        files.mkdir(Conn(), "share", "Projekte")
+
+    error = raised.value
+    assert error.code == "directory_create_denied"
+    assert error.context["share"] == "share"
+    # It names the permission that applies, and says the privilege does not —
+    # because anyone who saw the old message will come looking for it.
+    assert "write permission" in (error.hint or "")
+    assert "does not apply" in (error.hint or "")
+
+
+def test_a_refused_mkdir_that_is_not_a_permission_problem_keeps_its_own_answer() -> None:
+    """The branch must not swallow everything. A missing parent directory is
+    not a permission problem, and answering it with advice about permissions
+    would send somebody to check an ACL that is perfectly correct."""
+    import pytest
+
+    from samfscon.core.errors import NotFound
+    from samfscon.srv import files
+
+    class Tree:
+        def mkdir(self, _path):
+            raise RuntimeError("NT_STATUS_OBJECT_PATH_NOT_FOUND")
+
+    class Conn:
+        def tree(self, _share):
+            return Tree()
+
+    with pytest.raises(NotFound):
+        files.mkdir(Conn(), "share", "Projekte/Unterordner")
+

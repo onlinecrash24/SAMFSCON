@@ -26,7 +26,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from samfscon.core.errors import InvalidRequest, translate
+from samfscon.core.errors import InvalidRequest, PermissionDenied, translate
 from samfscon.srv.connection import ServerConnection
 
 logger = logging.getLogger(__name__)
@@ -153,7 +153,25 @@ def mkdir(conn: ServerConnection, share: str, path: str) -> str:
     try:
         conn.tree(share).mkdir(relative)
     except Exception as exc:
-        raise translate(exc) from exc
+        translated = translate(exc)
+        if isinstance(translated, PermissionDenied):
+            # The generic refusal cannot say which permission is missing, and a
+            # console that guesses picks the wrong one: creating a folder is an
+            # ordinary file access and needs write permission on the parent,
+            # not a privilege. Only this call site knows what was attempted, so
+            # this is where the sentence belongs.
+            raise PermissionDenied(
+                "The server refused to create this folder.",
+                code="directory_create_denied",
+                hint=(
+                    "Creating a folder is an ordinary file access: the account "
+                    "needs write permission on the folder it is created in. "
+                    "SeDiskOperatorPrivilege does not apply — that governs "
+                    "managing shares."
+                ),
+                context={"share": share, "path": relative},
+            ) from exc
+        raise translated from exc
     return relative
 
 

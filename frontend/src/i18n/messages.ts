@@ -636,6 +636,7 @@ export const de = {
   'config.risk.standalone_domain_rename':
     'Damit wandert der Arbeitsgruppen- bzw. Domänenname. Auf einem eigenständigen Server ist das eine Umbenennung; Clients finden ihn danach unter dem alten Namen nicht mehr.',
 
+  'config.live.heading': 'Was der Server gerade meldet',
   'config.live.stored': 'hier gespeichert',
   'config.live.inForce': 'in Kraft',
   'config.live.source.srvsvc': 'was der Server meldet',
@@ -747,6 +748,13 @@ export const de = {
   'error.authentication_failed': 'Die Anmeldung ist fehlgeschlagen.',
   'error.invalid_credentials': 'Falscher Benutzername oder falsches Passwort.',
   'error.user_not_found': 'Dieses Konto gibt es auf dem Server nicht.',
+  'error.account_not_found': 'Dieses Konto gibt es auf dem Server nicht.',
+  'error.kerberos_principal_unknown': 'Dieses Konto gibt es in diesem Realm nicht.',
+  'error.kerberos_principal_unknown.hint':
+    'Als benutzer@REALM anmelden und die Schreibweise des Realms prüfen.',
+  'error.directory_create_denied': 'Der Server hat das Anlegen dieses Ordners abgelehnt.',
+  'error.directory_create_denied.hint':
+    'Einen Ordner anzulegen ist ein gewöhnlicher Dateizugriff: das Konto braucht Schreibrechte auf dem Ordner, in dem er entstehen soll — dessen Berechtigungen prüfen. SeDiskOperatorPrivilege hilft hier nicht, dieses Recht gilt für das Verwalten von Freigaben.',
   'error.account_disabled': 'Das Konto ist deaktiviert.',
   'error.account_expired': 'Das Konto ist abgelaufen.',
   'error.account_locked_out': 'Das Konto ist gesperrt.',
@@ -812,7 +820,7 @@ export const de = {
 
   'error.insufficient_access': 'Dieser Vorgang wurde für Ihr Konto abgelehnt.',
   'error.insufficient_access.hint':
-    'Zum Verwalten von Freigaben braucht das Konto SeDiskOperatorPrivilege auf dem Fileserver: net rpc rights grant \'<Gruppe>\' SeDiskOperatorPrivilege -U <Admin>',
+    'Der Server sagt nicht, welches Recht fehlt, und welches es ist, hängt davon ab, was versucht wurde: bei Dateien und Ordnern Schreibrechte auf dem übergeordneten Verzeichnis, bei Freigaben SeDiskOperatorPrivilege, bei der Konfiguration Schreibzugriff auf die Registry.',
   'error.missing_disk_operator': 'Ihr Konto darf die Freigaben dieses Servers nicht verwalten.',
   'error.missing_disk_operator.hint':
     'Der Server prüft dafür SeDiskOperatorPrivilege. Vergeben mit: net rpc rights grant \'<Gruppe>\' SeDiskOperatorPrivilege -U <Admin>',
@@ -1476,6 +1484,7 @@ export const en: Record<MessageKey, string> = {
   'config.risk.standalone_domain_rename':
     'This moves the workgroup or domain name. On a standalone server it is a rename, and clients no longer find it under the old one.',
 
+  'config.live.heading': 'What the server currently reports',
   'config.live.stored': 'stored here',
   'config.live.inForce': 'in force',
   'config.live.source.srvsvc': 'what the server reports',
@@ -1587,6 +1596,13 @@ export const en: Record<MessageKey, string> = {
   'error.authentication_failed': 'Authentication failed.',
   'error.invalid_credentials': 'Wrong user name or password.',
   'error.user_not_found': 'No such account on this server.',
+  'error.account_not_found': 'No such account on this server.',
+  'error.kerberos_principal_unknown': 'No such account in this realm.',
+  'error.kerberos_principal_unknown.hint':
+    'Sign in as user@REALM and check the spelling of the realm.',
+  'error.directory_create_denied': 'The server refused to create this folder.',
+  'error.directory_create_denied.hint':
+    'Creating a folder is an ordinary file access: the account needs write permission on the folder it is created in — check that folder’s permissions. SeDiskOperatorPrivilege does not help here; that privilege governs managing shares.',
   'error.account_disabled': 'The account is disabled.',
   'error.account_expired': 'The account has expired.',
   'error.account_locked_out': 'The account is locked out.',
@@ -1653,7 +1669,7 @@ export const en: Record<MessageKey, string> = {
 
   'error.insufficient_access': 'The server refused this operation for your account.',
   'error.insufficient_access.hint':
-    'Managing shares needs SeDiskOperatorPrivilege on the file server: net rpc rights grant \'<group>\' SeDiskOperatorPrivilege -U <admin>',
+    'The server does not say which permission is missing, and which one it is depends on what was attempted: write access on the parent directory for a file or folder, SeDiskOperatorPrivilege for a share, write access to the registry for the configuration.',
   'error.missing_disk_operator': 'Your account may not manage this server’s shares.',
   'error.missing_disk_operator.hint':
     'The server checks SeDiskOperatorPrivilege for this. Grant it with: net rpc rights grant \'<group>\' SeDiskOperatorPrivilege -U <admin>',
