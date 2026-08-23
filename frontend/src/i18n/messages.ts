@@ -714,6 +714,16 @@ export const de = {
   'error.unknown_option':
     'Diese Option kennt SAMFSCON nicht.',
 
+  'config.undecided.title': 'Nicht nachprüfbar',
+  'config.undecided.intro':
+    'Diese Prüfung ließ sich nicht durchführen. Sie ist nicht fehlgeschlagen — sie konnte nicht laufen, und das ist etwas anderes.',
+  'config.undecided.entries': 'Nicht auflösbar: {entries}',
+  'config.undecided.accept': 'Ohne diese Prüfung speichern',
+  'error.own_address_unknown':
+    'Unter welcher Adresse der Server diese Konsole sieht, ließ sich nicht feststellen.',
+  'error.own_address_unknown.hint':
+    'Ohne diese Adresse lässt sich zu keiner Rechnerliste sagen, ob sie diese Konsole weiter zulässt. Das ist keine Aussage über die Liste: an ihr ändert nichts etwas daran. Bestätigen speichert sie ungeprüft.',
+
   // -- errors --------------------------------------------------------------
   'error.kerberos_needs_a_name': 'Kerberos braucht den Namen des Servers, bekannt ist nur seine Adresse.',
   'error.kerberos_needs_a_name.hint':
@@ -1544,6 +1554,16 @@ export const en: Record<MessageKey, string> = {
   'error.unknown_option':
     'SAMFSCON does not know this option.',
 
+
+  'config.undecided.title': 'Could not be checked',
+  'config.undecided.intro':
+    'This check could not be carried out. It did not fail; it could not run, and that is a different thing.',
+  'config.undecided.entries': 'Could not be resolved: {entries}',
+  'config.undecided.accept': 'Save without this check',
+  'error.own_address_unknown':
+    'The address the server sees this console at could not be established.',
+  'error.own_address_unknown.hint':
+    'Without that address, nothing can be said about any host list admitting this console. That is not a statement about the list — no wording of it changes this. Confirming saves it unchecked.',
 
   'error.kerberos_needs_a_name': 'Kerberos needs the server’s name, and only its address is known.',
   'error.kerberos_needs_a_name.hint':

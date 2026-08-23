@@ -28,6 +28,7 @@ import { Badge, Banner, ErrorMessage, Field, Modal, Spinner } from '../../compon
 import { useI18n } from '../../i18n'
 import type { MessageKey } from '../../i18n/messages'
 import { asPayload, changedOptions, confirmationsFor, type Change } from './changes'
+import { acceptableRefusal } from './refusal'
 
 const GROUPS = [
   'server',
@@ -58,6 +59,10 @@ export function ServerSettingsView({ onChanged }: { onChanged: (message: string)
   const [draft, setDraft] = useState<Record<string, string>>({})
   // What the confirmation dialog is holding, if anything.
   const [pending, setPending] = useState<Change[] | null>(null)
+  // The save that is in the air, kept so a refusal that can be accepted can be
+  // retried with one more token rather than making somebody fill the form in
+  // again. Cleared on success and on cancel.
+  const [attempt, setAttempt] = useState<{ changes: Change[]; extra: string[] } | null>(null)
 
   useEffect(() => {
     if (config.data) setDraft({ ...config.data.options.stored })
@@ -68,18 +73,27 @@ export function ServerSettingsView({ onChanged }: { onChanged: (message: string)
   const changes = useMemo(() => changedOptions(stored, draft, specs), [stored, draft, specs])
 
   const save = useMutation({
-    mutationFn: (confirmed: Change[]) =>
+    mutationFn: ({ changes: confirmed, extra }: { changes: Change[]; extra: string[] }) =>
       api.updateConfig({
         options: asPayload(confirmed),
-        confirm: confirmationsFor(confirmed, specs),
+        // The risky options by name, plus whatever checks could not be run and
+        // have been accepted one at a time. Never a blanket flag: a client that
+        // sent one would confirm an option it had never shown anybody.
+        confirm: [...confirmationsFor(confirmed, specs), ...extra],
         create_section: config.data?.section_present === false,
       }),
     onSuccess: (result) => {
       void queryClient.invalidateQueries({ queryKey: ['config'] })
       setPending(null)
+      setAttempt(null)
       onChanged(verificationText(result.verification, t))
     },
   })
+
+  // A refusal that names a token is one the server is willing to take an
+  // answer on — 409 with `confirm_with`, as against the 400s, which are values
+  // to fix and carry no token however hard the interface asks.
+  const acceptable = acceptableRefusal(save.error)
 
   if (config.isLoading) return <Spinner label={t('status.loading')} />
   if (!config.data) return <ErrorMessage error={config.error} />
@@ -94,10 +108,15 @@ export function ServerSettingsView({ onChanged }: { onChanged: (message: string)
     (change) => specs.find((spec) => spec.name === change.name)?.safety === 'risky',
   )
 
+  function start(next: { changes: Change[]; extra: string[] }) {
+    setAttempt(next)
+    save.mutate(next)
+  }
+
   function submit() {
     if (changes.length === 0) return
     if (risky) setPending(changes)
-    else save.mutate(changes)
+    else start({ changes, extra: [] })
   }
 
   return (
@@ -153,7 +172,9 @@ export function ServerSettingsView({ onChanged }: { onChanged: (message: string)
           ))}
         </nav>
 
-        <ErrorMessage error={save.error} onDismiss={() => save.reset()} />
+        {/* Suppressed while the acceptance dialog is up: it is the same
+            refusal, and showing it twice would read as two problems. */}
+        {!acceptable && <ErrorMessage error={save.error} onDismiss={() => save.reset()} />}
 
         {group === 'files' && <p className="muted small">{t('config.filesTabNote')}</p>}
         {group === 'printing' && <PrinterShares count={loaded.printer_shares} />}
@@ -226,7 +247,7 @@ export function ServerSettingsView({ onChanged }: { onChanged: (message: string)
               <button
                 type="button"
                 className="button button--danger"
-                onClick={() => save.mutate(pending)}
+                onClick={() => start({ changes: pending, extra: [] })}
               >
                 {t('config.confirmProceed')}
               </button>
@@ -245,6 +266,50 @@ export function ServerSettingsView({ onChanged }: { onChanged: (message: string)
                 </li>
               ))}
           </ul>
+        </Modal>
+      )}
+
+      {acceptable && attempt && (
+        <Modal
+          title={t('config.undecided.title')}
+          onClose={() => {
+            save.reset()
+            setAttempt(null)
+          }}
+          footer={
+            <>
+              <button
+                type="button"
+                className="button"
+                onClick={() => {
+                  save.reset()
+                  setAttempt(null)
+                }}
+              >
+                {t('action.cancel')}
+              </button>
+              <button
+                type="button"
+                className="button button--danger"
+                onClick={() =>
+                  start({ changes: attempt.changes, extra: [...attempt.extra, acceptable.token] })
+                }
+              >
+                {t('config.undecided.accept')}
+              </button>
+            </>
+          }
+        >
+          <p>{t('config.undecided.intro')}</p>
+          <p>
+            <strong>{acceptable.message}</strong>
+          </p>
+          {acceptable.hint && <p className="muted small">{acceptable.hint}</p>}
+          {acceptable.entries.length > 0 && (
+            <p className="muted small mono">
+              {t('config.undecided.entries', { entries: acceptable.entries.join(', ') })}
+            </p>
+          )}
         </Modal>
       )}
     </div>

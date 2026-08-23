@@ -20,7 +20,7 @@ from typing import Any, ClassVar
 import pytest
 
 from samfscon.config import MODE_AD_MEMBER, MODE_STANDALONE
-from samfscon.core.errors import InvalidRequest, NotConfigured
+from samfscon.core.errors import Conflict, InvalidRequest, NotConfigured
 from samfscon.srv import globalconf as g
 
 
@@ -286,12 +286,15 @@ def test_a_hosts_list_that_shuts_this_console_out_is_refused(server) -> None:
 def test_confirming_does_not_lift_a_decided_exclusion(server) -> None:
     """We checked, and it locks the console out. No dialog makes that
     recoverable when recovery needs a shell on the server."""
-    with pytest.raises(InvalidRequest):
+    with pytest.raises(InvalidRequest) as raised:
         g.write(
             object(),
             {"hosts allow": "192.168.1.0/24"},
             confirm=frozenset({"hosts allow", g.UNDECIDABLE_CONFIRM}),
         )
+    # 400 and staying 400. The status is what stops the interface offering a
+    # button for it, and a decided lockout is not a thing to click through.
+    assert raised.value.status_code == 400
 
 
 def test_a_list_that_covers_this_console_goes_through(server) -> None:
@@ -302,11 +305,14 @@ def test_a_list_that_covers_this_console_goes_through(server) -> None:
 def test_an_undecidable_list_is_refused_once_and_then_allowed(server) -> None:
     """The asymmetry. Refusing permanently on "we could not check" would be
     could-not-determine reported as is-so."""
-    with pytest.raises(InvalidRequest) as raised:
+    with pytest.raises(Conflict) as raised:
         g.write(object(), {"hosts allow": "fs1.example.lan"}, confirm=frozenset({"hosts allow"}))
 
     error = raised.value
     assert error.code == "hosts_allow_undecidable"
+    # 409, not 400: there is nothing here to fix. The check could not run, and
+    # the interface offers that as something to accept rather than correct.
+    assert error.status_code == 409
     assert error.context["undecidable_entries"] == ["fs1.example.lan"]
     # Its own token, not the option's. Confirming the option says "I know what
     # it does"; this says "I accept you could not check whether it shuts me
@@ -320,14 +326,66 @@ def test_an_undecidable_list_is_refused_once_and_then_allowed(server) -> None:
     )
 
 
-def test_an_unknown_own_address_makes_every_list_undecidable(server) -> None:
+def test_an_unknown_own_address_is_its_own_refusal(server) -> None:
+    """Undecidable, never excluded — and not the list's fault either.
+
+    Reported as `hosts_allow_undecidable` it would send somebody to study a
+    list that is perfectly fine. Nothing that could be written in that field
+    resolves this, because what is missing is the address to match it against.
+    """
     server["config"].own_client_address = None
     server["config"].own_client_address_confidence = "unknown"
 
-    with pytest.raises(InvalidRequest) as raised:
+    with pytest.raises(Conflict) as raised:
         g.write(object(), {"hosts allow": "192.168.1.0/24"}, confirm=frozenset({"hosts allow"}))
-    # Undecidable, never excluded: we do not know what address we are.
-    assert raised.value.code == "hosts_allow_undecidable"
+
+    error = raised.value
+    assert error.code == "own_address_unknown"
+    assert error.status_code == 409
+    assert error.context["confirm_with"] == g.ADDRESS_UNKNOWN_CONFIRM
+
+
+def test_the_unknown_address_is_confirmed_once_for_both_lists(server) -> None:
+    """It is a fact about this session, not about either list.
+
+    So its token is neither list's. Confirming `hosts allow:undecidable` must
+    not carry it — that says "I accept these entries could not be resolved",
+    and here there were no entries to resolve.
+    """
+    server["config"].own_client_address = None
+    server["config"].own_client_address_confidence = "unknown"
+
+    with pytest.raises(Conflict) as raised:
+        g.write(
+            object(),
+            {"hosts allow": "192.168.1.0/24"},
+            confirm=frozenset({"hosts allow", g.UNDECIDABLE_CONFIRM}),
+        )
+    assert raised.value.code == "own_address_unknown"
+
+    g.write(
+        object(),
+        {"hosts allow": "192.168.1.0/24"},
+        confirm=frozenset({"hosts allow", g.ADDRESS_UNKNOWN_CONFIRM}),
+    )
+    assert server["written"] == {"hosts allow": "192.168.1.0/24"}
+
+
+def test_the_same_token_answers_a_deny_list_too(server) -> None:
+    """One acceptance, because one address was missing — not one per option."""
+    server["config"].own_client_address = None
+    server["config"].own_client_address_confidence = "unknown"
+
+    with pytest.raises(Conflict) as raised:
+        g.write(object(), {"hosts deny": "192.168.1.0/24"}, confirm=frozenset({"hosts deny"}))
+    assert raised.value.code == "own_address_unknown"
+
+    g.write(
+        object(),
+        {"hosts deny": "192.168.1.0/24"},
+        confirm=frozenset({"hosts deny", g.ADDRESS_UNKNOWN_CONFIRM}),
+    )
+    assert server["written"] == {"hosts deny": "192.168.1.0/24"}
 
 
 def test_clearing_the_list_is_never_a_lockout(server) -> None:
@@ -350,6 +408,8 @@ def test_a_deny_naming_this_console_is_refused_when_nothing_admits_it(server) ->
 
     error = raised.value
     assert error.code == "hosts_deny_includes_console"
+    # Decided, so 400 and no button: we looked, and it shuts this console out.
+    assert error.status_code == 400
     assert error.context["address"] == "172.19.0.4"
     assert server["written"] is None
 
@@ -386,7 +446,7 @@ def test_clearing_the_allow_list_exposes_the_stored_deny(server) -> None:
 
 def test_an_undecidable_deny_has_its_own_token(server) -> None:
     """Confirming one list must not waive the check on the other."""
-    with pytest.raises(InvalidRequest) as raised:
+    with pytest.raises(Conflict) as raised:
         g.write(
             object(),
             {"hosts deny": "fs1.example.lan"},
@@ -395,6 +455,7 @@ def test_an_undecidable_deny_has_its_own_token(server) -> None:
 
     error = raised.value
     assert error.code == "hosts_deny_undecidable"
+    assert error.status_code == 409
     assert error.context["confirm_with"] == g.UNDECIDABLE_CONFIRM_FOR["hosts deny"]
 
     g.write(

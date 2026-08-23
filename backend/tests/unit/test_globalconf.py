@@ -22,12 +22,18 @@ from __future__ import annotations
 import pytest
 
 from samfscon.config import MODE_AD_MEMBER, MODE_STANDALONE
-from samfscon.core.errors import InvalidRequest
+from samfscon.core.errors import Conflict, InvalidRequest, SamfsconError
 from samfscon.srv import globalconf as g
 
 
-def refusal(call, **kwargs) -> InvalidRequest:
-    with pytest.raises(InvalidRequest) as raised:
+def refusal(call, **kwargs) -> SamfsconError:
+    """Any refusal, whichever family it belongs to.
+
+    The family is asserted where it is the point rather than here: a helper
+    that only ever caught one of them would quietly stop covering whichever
+    check moved to the other.
+    """
+    with pytest.raises(SamfsconError) as raised:
         call(**kwargs)
     return raised.value
 
@@ -242,6 +248,29 @@ def test_a_risky_option_is_refused_until_it_is_confirmed() -> None:
     assert error.code == "confirmation_required"
     # The code the interface needs to show the right sentence.
     assert error.context["risk"] == "exposure_wide_links"
+    # And the family it needs to decide whether to offer a button at all.
+    # Nothing about the request is wrong; it is waiting for an answer.
+    assert isinstance(error, Conflict)
+    assert error.status_code == 409
+
+
+def test_a_value_that_is_simply_wrong_is_the_other_family() -> None:
+    """The distinction the status carries, from the side that must not move.
+
+    Both of these refuse a change to the same option. One is answered by
+    clicking through and the other never is, and an interface that could not
+    tell them apart would either offer a button that always fails or hide the
+    one that works.
+    """
+    error = refusal(
+        g.validate,
+        options={"server max protocol": "SMB9"},
+        mode=MODE_STANDALONE,
+        confirm=frozenset({"server max protocol"}),
+    )
+    assert error.code == "invalid_option_value"
+    assert isinstance(error, InvalidRequest)
+    assert error.status_code == 400
 
 
 def test_a_confirmed_risky_option_goes_through() -> None:

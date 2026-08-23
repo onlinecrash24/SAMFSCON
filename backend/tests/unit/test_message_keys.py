@@ -30,8 +30,23 @@ def catalogue() -> str:
     return MESSAGES.read_text(encoding="utf-8")
 
 
-def keys() -> set[str]:
-    return set(re.findall(r"^  '([A-Za-z0-9._]+)':", catalogue(), re.MULTILINE))
+def keys(language: str = "de") -> set[str]:
+    """The keys of one catalogue.
+
+    One at a time and never the union of both. A union answers "is this string
+    written down anywhere", which is true of a key that exists only in German —
+    and a German sentence in an English interface is exactly the fault this
+    file is here to catch.
+    """
+    text = catalogue()
+    boundary = text.index("export const en")
+    half = text[:boundary] if language == "de" else text[boundary:]
+    return set(re.findall(r"^  '([A-Za-z0-9._]+)':", half, re.MULTILINE))
+
+
+def both() -> set[str]:
+    """The keys that are in both, which is the only kind that can be rendered."""
+    return keys("de") & keys("en")
 
 
 def note_codes() -> set[str]:
@@ -55,20 +70,20 @@ def verification_codes() -> set[str]:
     ],
 )
 def test_every_code_has_a_message_key(prefix: str, codes: tuple[str, ...]) -> None:
-    present = keys()
+    present = both()
     assert codes, "an empty code list would make this pass and prove nothing"
     missing = [f"{prefix}{code}" for code in codes if f"{prefix}{code}" not in present]
     assert not missing, f"no message for: {', '.join(missing)}"
 
 
 def test_every_note_this_module_writes_has_a_message_key() -> None:
-    present = keys()
+    present = both()
     missing = [code for code in sorted(note_codes()) if f"caps.note.{code}" not in present]
     assert not missing, f"no message for: {', '.join(missing)}"
 
 
 def test_each_verification_outcome_has_a_message_key() -> None:
-    present = keys()
+    present = both()
     found = verification_codes()
     # Three, and the test says so: a fourth would be a code meaning "the write
     # failed", which this console cannot establish and must not claim.
@@ -77,17 +92,54 @@ def test_each_verification_outcome_has_a_message_key() -> None:
     assert not missing, f"no message for: {', '.join(missing)}"
 
 
-def test_the_english_catalogue_carries_the_same_settings_keys() -> None:
+def error_codes() -> set[str]:
+    source = Path(g.__file__).read_text(encoding="utf-8")
+    # `code=` and `code =` both, because the module raises some of these
+    # through a helper that takes the code by keyword and one that assigns it.
+    return set(re.findall(r'code\s*=\s*"([a-z_]+)"', source))
+
+
+def test_every_refusal_this_module_raises_has_a_message() -> None:
+    """Otherwise the reader gets the server's English sentence under a German
+    heading — which is what `te()` falls back to, and it is a fallback rather
+    than a translation."""
+    present = both()
+    found = error_codes()
+    assert len(found) >= 10, "the extraction found almost nothing, which is not a pass"
+    missing = [code for code in sorted(found) if f"error.{code}" not in present]
+    assert not missing, f"no message for: {', '.join(missing)}"
+
+
+def test_the_two_families_are_both_present_and_stay_apart() -> None:
+    """What the split is for.
+
+    A refusal the interface can offer a button for is 409 and names the token
+    to send back; a refusal that is a value to fix is 400 and names none. Both
+    kinds exist here, so neither classification can quietly swallow the other.
+    """
+    from samfscon.core.errors import Conflict, InvalidRequest
+
+    source = Path(g.__file__).read_text(encoding="utf-8")
+    assert "raise Conflict(" in source
+    assert "raise InvalidRequest(" in source
+    assert Conflict.status_code == 409
+    assert InvalidRequest.status_code == 400
+
+    # And the two acceptances are two tokens: one about a list, one about this
+    # session. A single token would let either stand for the other.
+    assert g.ADDRESS_UNKNOWN_CONFIRM not in g.UNDECIDABLE_CONFIRM_FOR.values()
+    assert len(set(g.UNDECIDABLE_CONFIRM_FOR.values())) == len(g.UNDECIDABLE_CONFIRM_FOR)
+
+
+def test_the_two_catalogues_hold_the_same_keys() -> None:
     """MessageKey derives from the German one, so this is what the type cannot see.
 
-    A key present twice is one German and one English string; a key present
-    once is a German sentence rendered in an English interface.
+    The compiler requires English to have every German key. It cannot see a key
+    English has and German does not — that one falls back to itself and renders
+    as its own dotted name — and it says nothing about this file's shape, which
+    is what every other test here reads.
     """
-    text = catalogue()
-    once = [
-        key
-        for key in sorted(keys())
-        if key.startswith(("config.", "caps.note."))
-        and len(re.findall(rf"^  '{re.escape(key)}':", text, re.MULTILINE)) != 2
-    ]
-    assert not once, f"not in both catalogues: {', '.join(once)}"
+    german, english = keys("de"), keys("en")
+    assert german, "the German half was not found, which is not a pass"
+    assert sorted(german - english) == [], "missing from the English catalogue"
+    assert sorted(english - german) == [], "missing from the German catalogue"

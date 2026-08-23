@@ -45,7 +45,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from samfscon.config import MODE_AD_MEMBER
-from samfscon.core.errors import InvalidRequest
+from samfscon.core.errors import Conflict, InvalidRequest
 from samfscon.srv import shareconf
 from samfscon.srv.shareconf import TYPE_BOOL, TYPE_CHOICE, TYPE_INT, TYPE_LIST, TYPE_TEXT
 
@@ -143,6 +143,15 @@ UNDECIDABLE_CONFIRM_FOR = {
     "hosts allow": UNDECIDABLE_CONFIRM,
     "hosts deny": "hosts deny:undecidable",
 }
+
+# And one for not knowing what address we are. Separate from the two above
+# because it is a fact about the session rather than about either list: it
+# makes every host list undecidable at once, it would make the next check that
+# needs an address undecidable too, and accepting it says something different —
+# "carry on without establishing which address the server matches me at",
+# not "I accept that this list has entries you cannot resolve". One token for
+# both would let either acceptance stand for the other.
+ADDRESS_UNKNOWN_CONFIRM = "own address:unknown"
 
 # The dialects, oldest first. The order is what makes a floor-above-ceiling
 # comparison arithmetic rather than a table of special cases.
@@ -946,7 +955,11 @@ def validate(
             continue
 
         if safety == RISKY and option.name not in confirm:
-            raise InvalidRequest(
+            # 409 rather than 400. Nothing about the request is wrong; it is
+            # waiting for an answer, and the interface tells the two families
+            # apart by status: "fix the value" against "this can proceed once
+            # you say so".
+            raise Conflict(
                 f"{option.name!r} needs to be confirmed before it is changed.",
                 code="confirmation_required",
                 context={"option": option.name, "risk": option.risk},
@@ -1683,6 +1696,17 @@ def _check_hosts(
     whether this shuts you out". Letting one stand for the other would mean
     every ordinary use of the option silently waived the check that exists to
     catch the lockout.
+
+    An unknown own address is separated out again, with a code and a token of
+    its own. It reads as the same refusal and is not one: it makes both lists
+    undecidable at once, no wording of either list can resolve it, and the
+    thing to be accepted is about this session rather than about what is being
+    written. A caller told "this list could not be decided" would go looking at
+    the list.
+
+    The decided refusals are 400 and the two acceptable ones are 409, which is
+    how the interface tells "fix the value" from "this can proceed once you say
+    so" without matching on message text.
     """
     def effective(name: str) -> str:
         # As the pair will stand after the change. A half that is not being
@@ -1700,7 +1724,7 @@ def _check_hosts(
     deny = effective("hosts deny")
     address = current.own_client_address
 
-    def refuse(option: str, verdict: dict[str, Any], code: str, message: str) -> None:
+    def refuse(option: str, verdict: dict[str, Any], *, code: str, message: str) -> None:
         raise InvalidRequest(
             message,
             code=code,
@@ -1713,11 +1737,25 @@ def _check_hosts(
             },
         )
 
-    def undecidable(option: str, verdict: dict[str, Any], code: str, message: str) -> None:
-        token = UNDECIDABLE_CONFIRM_FOR[option]
+    def undecidable(option: str, verdict: dict[str, Any], *, code: str, message: str) -> None:
+        # Which of the two undecidables this is. "No entry could be resolved"
+        # and "we do not know what address to resolve them against" arrive from
+        # hosts_verdict as one verdict and are two different things to be told:
+        # the first is about the value being written, the second about this
+        # session, and only the second says nothing at all about the list.
+        if verdict.get("reason") == "own_address_unknown":
+            token = ADDRESS_UNKNOWN_CONFIRM
+            code = "own_address_unknown"
+            message = "The address the server sees this console at could not be established."
+        else:
+            token = UNDECIDABLE_CONFIRM_FOR[option]
+
         if token in confirm:
             return
-        raise InvalidRequest(
+        # 409, and deliberately not the 400 the decided exclusions get. This is
+        # not a value to fix — it is a check that could not run, and the
+        # interface offers it as something to accept.
+        raise Conflict(
             message,
             code=code,
             context={
@@ -1742,14 +1780,14 @@ def _check_hosts(
             refuse(
                 "hosts allow",
                 verdict,
-                "hosts_allow_excludes_console",
-                "This list does not include the address the server sees this console at.",
+                code="hosts_allow_excludes_console",
+                message="This list does not include the address the server sees this console at.",
             )
         undecidable(
             "hosts allow",
             verdict,
-            "hosts_allow_undecidable",
-            "Whether this list still admits this console could not be decided.",
+            code="hosts_allow_undecidable",
+            message="Whether this list still admits this console could not be decided.",
         )
         # Undecidable and confirmed. The deny below is then unjudgeable too —
         # it only matters if the allow does not cover us, and that is the thing
@@ -1767,15 +1805,18 @@ def _check_hosts(
         refuse(
             "hosts deny",
             verdict,
-            "hosts_deny_includes_console",
-            "This list names the address the server sees this console at, and nothing admits it.",
+            code="hosts_deny_includes_console",
+            message=(
+                "This list names the address the server sees this console at, "
+                "and nothing admits it."
+            ),
         )
     if verdict["verdict"] == "undecidable":
         undecidable(
             "hosts deny",
             verdict,
-            "hosts_deny_undecidable",
-            "Whether this list shuts this console out could not be decided.",
+            code="hosts_deny_undecidable",
+            message="Whether this list shuts this console out could not be decided.",
         )
 
 
@@ -1815,6 +1856,7 @@ def _verify(conn: Any, checked: dict[str, str | None]) -> dict[str, Any]:
 
 
 __all__ = [
+    "ADDRESS_UNKNOWN_CONFIRM",
     "BY_NAME",
     "CATALOGUE",
     "GROUPS",
