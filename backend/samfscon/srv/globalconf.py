@@ -1228,22 +1228,44 @@ class GlobalConfig:
     own_client_address_confidence: str
     mode: str
     notes: list[Any]
+    # None means the share list could not be read; 0 means it was read and
+    # holds no printer shares. The printing tab says something different for
+    # each, and only one of the two means the tab is fine.
+    printer_shares: int | None = None
+    # What this account may do here. Carried with the configuration rather than
+    # fetched beside it, so the form cannot be drawn from one moment's rights
+    # and filled from another's.
+    capabilities: Any = None
+    # This console's own SMB floor, so the risk sentence about lowering the
+    # server's ceiling can name the number it would fall below.
+    console_dialect_floor: str = ""
 
     def describe(self) -> dict[str, Any]:
         return {
             "section_present": self.section_present,
-            "stored": dict(self.stored),
-            "known": dict(self.known),
-            "extra": dict(self.extra),
-            "not_applicable": dict(self.not_applicable),
-            "idmap": dict(self.idmap),
+            "options": {
+                # The union, which is what the form diffs its draft against.
+                "stored": dict(self.stored),
+                "known": dict(self.known),
+                "extra": dict(self.extra),
+                "not_applicable": dict(self.not_applicable),
+                "idmap": dict(self.idmap),
+            },
             "live": [value.describe() for value in self.live],
             "in_force": self.in_force,
             "in_force_evidence": list(self.in_force_evidence),
-            "own_client_address": self.own_client_address,
-            "own_client_address_confidence": self.own_client_address_confidence,
+            "printer_shares": self.printer_shares,
+            # The runtime halves of the risk sentences. The catalogue stays
+            # static and round-trip-free; the values that differ per server and
+            # per session ride with the configuration instead.
+            "risks": {
+                "own_client_address": self.own_client_address,
+                "own_client_address_confidence": self.own_client_address_confidence,
+                "console_dialect_floor": self.console_dialect_floor,
+            },
             "mode": self.mode,
             "notes": [note.describe() for note in self.notes],
+            "capabilities": self.capabilities.describe() if self.capabilities else None,
         }
 
 
@@ -1523,6 +1545,26 @@ def read(conn: Any) -> GlobalConfig:
     decided, evidence = in_force_check(stored, live)
     known, extra, not_applicable, idmap = split(stored, mode)
 
+    from samfscon.config import get_settings
+    from samfscon.srv import shares as shares_module
+
+    # Each in its own try, and each costing one field rather than the page.
+    printer_shares: int | None
+    try:
+        listed = shares_module.list_shares(conn, include_administrative=True)
+        printer_shares = sum(1 for share in listed if share.type == "printer")
+    except Exception:
+        logger.debug("the share list could not be read", exc_info=True)
+        notes.append(diagnostics.Note("printer_shares_unknown"))
+        printer_shares = None
+
+    try:
+        caps: Any = diagnostics.capabilities(conn)
+    except Exception:
+        logger.debug("the capabilities could not be established", exc_info=True)
+        notes.append(diagnostics.Note("capabilities_unreadable"))
+        caps = None
+
     return GlobalConfig(
         section_present=section_present,
         stored=stored,
@@ -1537,6 +1579,9 @@ def read(conn: Any) -> GlobalConfig:
         own_client_address_confidence=confidence,
         mode=mode,
         notes=notes,
+        printer_shares=printer_shares,
+        capabilities=caps,
+        console_dialect_floor=get_settings().smb_min_protocol,
     )
 
 

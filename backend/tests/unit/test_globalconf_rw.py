@@ -221,7 +221,7 @@ def server(monkeypatch: pytest.MonkeyPatch):
         return {name: {"old": None, "new": value} for name, value in options.items()}
 
     monkeypatch.setattr(diagnostics, "capabilities", lambda _c, **_k: Capabilities())
-    monkeypatch.setattr(diagnostics, "require_share_management", lambda _caps: None)
+    monkeypatch.setattr(diagnostics, "require_configuration_write", lambda _caps: None)
     monkeypatch.setattr(globalconf, "read", lambda _c: state["config"])
     monkeypatch.setattr(registry, "write_options", write_options)
     monkeypatch.setattr(globalconf, "live_values", lambda _c: [])
