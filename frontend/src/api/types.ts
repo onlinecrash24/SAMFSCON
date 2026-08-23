@@ -541,3 +541,125 @@ export interface AccountUpdate {
   disabled?: boolean
   password_never_expires?: boolean
 }
+
+// ---------------------------------------------------------------------------
+// Server settings
+// ---------------------------------------------------------------------------
+
+/** One global option from the catalogue, as a form control. */
+export interface GlobalOptionSpec {
+  name: string
+  type: 'bool' | 'text' | 'list' | 'int' | 'choice'
+  group: 'server' | 'protocol' | 'access' | 'files' | 'printing' | 'winbind' | 'advanced'
+  /**
+   * What Samba does when nothing sets the option.
+   *
+   * Reference text and never a placeholder. A global option lives in two
+   * places and this console reads one of them, so Samba's default under an
+   * empty field is a statement about Samba; the same value *in* the field
+   * would be a statement about this server, which nothing here can make.
+   */
+  default: string | null
+  /** Why there is no default to state: 'compiled_in' | 'from_hostname'. */
+  default_note: string | null
+  choices: string[]
+  doc: string
+  safety: 'safe' | 'risky' | 'read_only'
+  risk: string | null
+  read_only_reason: string | null
+  effect: 'connection' | 'reload' | 'restart'
+  daemons: string[]
+  live_source: string | null
+}
+
+export interface LiveValue {
+  option: string
+  value: string | null
+  /**
+   * False means the endpoint refused. `value` is then null and must not be
+   * rendered as the server answering "nothing" — that is a permission gap
+   * wearing the costume of a fact.
+   */
+  readable: boolean
+  source: string
+}
+
+export interface InForceEvidence {
+  check: string
+  stored?: string | null
+  live?: string | null
+  value?: string | null
+  verdict: 'confirms' | 'contradicts' | 'undecided' | 'proves_nothing'
+  reason?: string
+  why?: string
+}
+
+export interface GlobalConfig {
+  /**
+   * Whether the registry holds a global section.
+   *
+   * `false` means the section list was read and there is none — the common
+   * case, and the one the view has to explain. `null` means the list could not
+   * be read, which is not the same thing and must not be shown as if it were.
+   */
+  section_present: boolean | null
+  options: {
+    /** The union, which is what the form diffs its draft against. */
+    stored: Record<string, string>
+    known: Record<string, string>
+    extra: Record<string, string>
+    /**
+     * Catalogued, stored, and not applicable to this kind of server. Shown
+     * read-only rather than dropped: hiding half a configuration would make
+     * the other half a lie.
+     */
+    not_applicable: Record<string, string>
+    idmap: Record<string, string>
+  }
+  live: LiveValue[]
+  /**
+   * Whether the server is reading its registry global section at all. `null`
+   * where no comparison could be made — see in_force_evidence.
+   */
+  in_force: boolean | null
+  in_force_evidence: InForceEvidence[]
+  /** null = the share list could not be read; 0 = read, and there are none. */
+  printer_shares: number | null
+  /**
+   * The runtime halves of the risk sentences. The catalogue stays static and
+   * round-trip-free; what differs per server and per session rides here.
+   */
+  risks: {
+    own_client_address: string | null
+    own_client_address_confidence: 'one_session' | 'several' | 'unknown'
+    console_dialect_floor: string
+  }
+  mode: string
+  notes: CapabilityNote[]
+  /** Null when the capabilities themselves could not be established. */
+  capabilities: Capabilities | null
+}
+
+export interface GlobalConfigUpdate {
+  options: Record<string, string | null>
+  confirm: string[]
+  create_section: boolean
+}
+
+export interface GlobalConfigResult {
+  applied: Record<string, { old: string | null; new: string | null }>
+  section_created: boolean
+  /**
+   * Three codes and no fourth. In particular none of them means "the write
+   * failed": a value stored and not yet reported has two causes this console
+   * cannot tell apart.
+   */
+  verification: {
+    code: 'applied_confirmed' | 'not_yet_visible' | 'not_comparable'
+    reason?: string
+    option?: string
+    value?: string
+    stored?: string
+    live?: string | null
+  }
+}

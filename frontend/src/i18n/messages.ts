@@ -526,6 +526,194 @@ export const de = {
   'error.password_encryption_failed': 'Das Passwort ließ sich nicht für die Übertragung verschlüsseln.',
   'error.samr_password_unsupported': 'Diese Samba-Version unterstützt das Setzen des Passworts nicht.',
 
+  // -- server settings ------------------------------------------------------
+  'config.group.server': 'Server',
+  'config.group.protocol': 'Protokoll',
+  'config.group.access': 'Zugriff',
+  'config.group.files': 'Dateien',
+  'config.group.printing': 'Drucken',
+  'config.group.winbind': 'Winbind',
+  'config.group.advanced': 'Erweitert',
+
+  'config.registryOnly':
+    'Diese Seite zeigt und ändert nur, was in der Registry-Konfiguration steht. Die Text-smb.conf liest SAMFSCON nicht: ein leeres Feld heißt „hier nicht gesetzt“ und nicht „nicht gesetzt“.',
+  'config.notApplied':
+    'Gespeicherte Änderungen gelten erst, wenn Samba seine Konfiguration neu liest. SAMFSCON kann das weder auslösen noch etwas neu starten.',
+  'config.notApplied.faster':
+    'Auf dem Server geht das am schnellsten mit: smbcontrol all reload-config',
+  'config.notApplied.restart':
+    'Optionen mit „Neustart nötig“ wirken auch danach erst, wenn der genannte Dienst neu gestartet wurde.',
+  'config.filesTabNote':
+    'Diese Optionen sind die Vorgabe für alle Freigaben. Eine Freigabe, die dieselbe Option selbst setzt, gewinnt.',
+
+  'config.sectionAbsent':
+    'Dieser Server hat keinen global-Abschnitt in seiner Registry-Konfiguration.',
+  'config.sectionUnknown':
+    'Ob dieser Server einen global-Abschnitt in der Registry hat, ließ sich nicht feststellen. Das ist nicht dasselbe wie „er hat keinen“.',
+  'config.createSection': 'Abschnitt anlegen',
+  'config.createSection.explain':
+    'Ihn anzulegen ändert nichts, solange die smb.conf des Servers nicht „include = registry“ enthält, und zwar vor den Zeilen, die dieselben Optionen setzen. Diese Datei kann SAMFSCON nicht lesen und das also nicht nachsehen.',
+  'config.createSection.confirm': 'Trotzdem anlegen',
+
+  'config.inForce.confirmed':
+    'Der Server meldet, was hier gespeichert ist: die Registry-Konfiguration wird gelesen.',
+  'config.inForce.contradicted':
+    'Der Server meldet etwas anderes, als hier gespeichert ist. Vermutlich fehlt „include = registry“ in der Text-smb.conf, oder eine Zeile dort überschreibt sie.',
+  'config.inForce.unknown.not_stored':
+    'Ob die Registry-Konfiguration überhaupt gelesen wird, ist offen: es ist nichts gespeichert, womit sich das vergleichen ließe.',
+  'config.inForce.unknown.variable_expansion':
+    'Ob die Registry-Konfiguration gelesen wird, ist offen: der gespeicherte Wert enthält eine Variable, und der Server meldet sie aufgelöst.',
+  'config.inForce.unknown.indistinguishable_from_default':
+    'Ob die Registry-Konfiguration gelesen wird, ist offen: gespeicherter und gemeldeter Wert sind beide Sambas Vorgabe, und Übereinstimmung beweist dann nichts.',
+  'config.inForce.unknown.live_unreadable':
+    'Ob die Registry-Konfiguration gelesen wird, ist offen: der Server hat die Abfrage abgelehnt.',
+
+  'config.verify.applied_confirmed': 'Gespeichert, und der Server meldet den neuen Wert bereits.',
+  'config.verify.not_yet_visible':
+    'Gespeichert. Der Server meldet weiter „{live}“ statt „{stored}“: entweder hat er seine Konfiguration noch nicht neu gelesen, oder die Text-smb.conf setzt dieselbe Option. Welches von beiden, kann diese Konsole nicht unterscheiden.',
+  'config.verify.not_comparable':
+    'Gespeichert. Ob es wirkt, ließ sich von hier aus nicht nachprüfen.',
+
+  'config.notSetHere': 'hier nicht gesetzt',
+  'config.notSetHere.why':
+    'Steht nicht in der Registry-Konfiguration. Ob die Text-smb.conf etwas setzt, sieht diese Konsole nicht.',
+  'config.defaultIs': 'Ohne Eintrag gilt Sambas Vorgabe: {value}',
+  'config.defaultNote.compiled_in':
+    'Ohne Eintrag gilt die einkompilierte Vorgabe; welche das ist, meldet keine RPC-Schnittstelle.',
+  'config.defaultNote.from_hostname': 'Ohne Eintrag leitet Samba den Wert aus dem Hostnamen ab.',
+  'config.unlistedValue': 'gespeichert, steht nicht in der Auswahl',
+
+  'config.effect.connection': 'gilt für neue Verbindungen',
+  'config.effect.reload': 'gilt nach dem Neulesen der Konfiguration',
+  'config.effect.restart': 'Neustart nötig',
+  'config.effect.daemons': 'betrifft {names}',
+  'config.readOnly': 'nur lesbar',
+  'config.risky': 'riskant',
+
+  'config.readOnly.machine_account_identity':
+    'Dieser Name ist die Identität des Maschinenkontos. Er wird beim Domänenbeitritt gesetzt; ihn hier zu ändern bräche die Vertrauensstellung.',
+  'config.readOnly.join_has_no_rpc':
+    'Der Sicherheitsmodus wird beim Domänenbeitritt gesetzt. Dafür gibt es keine RPC-Schnittstelle: das geht auf dem Server selbst, mit net ads join.',
+  'config.readOnly.member_workgroup_is_the_join':
+    'Auf einem Domänenmitglied ist das die Domäne, der der Server beigetreten ist. Eine Änderung hier bräche den Beitritt.',
+  'config.readOnly.bound_at_startup':
+    'Samba wertet das beim Start aus. Ein hier geschriebener Wert würde bis zu einem Neustart, den diese Konsole nicht auslösen kann, etwas anderes anzeigen als gilt.',
+  'config.readOnly.hides_configuration':
+    'Das lenkt die Konfiguration in Dateien um, die diese Konsole nicht lesen kann. Sie zeigte dann weiter, was hier steht, während der Server etwas anderes täte.',
+  'config.readOnly.invalidates_stored_names':
+    'Alle bereits gespeicherten Namen sind mit dem jetzigen Trennzeichen geschrieben. Es zu ändern macht sie ungültig.',
+  'config.readOnly.no_value_improves_on_the_default':
+    'Sambas Vorgabe ist seit Jahren besser als jede Handeinstellung. Die Option steht hier, weil sie auf alten Servern gesetzt ist, nicht weil sie gesetzt gehört.',
+  'config.readOnly.idmap_remaps_existing_files':
+    'Die idmap-Bereiche bestimmen, welche Unix-Kennung zu welchem Domänenkonto gehört. Sie zu verschieben ordnet vorhandene Dateien anderen Konten zu.',
+
+  'config.risk.lockout_hosts':
+    'Diese Liste entscheidet, wer den Server erreicht. Der Server sieht diese Konsole unter {address}; fehlt diese Adresse, ist die nächste Verbindung von hier weg.',
+  'config.risk.lockout_dialect_floor':
+    'Verlangt der Server einen höheren Dialekt, als ein Client kann, verbindet dieser Client nicht mehr. SAMFSCON spricht mindestens {floor}.',
+  'config.risk.lockout_dialect_ceiling':
+    'Liegt die Obergrenze unter {floor}, erreicht diese Konsole den Server nicht mehr — und damit auch diese Einstellung nicht.',
+  'config.risk.lockout_signing':
+    'Verlangt der Server eine Signierung, die ein Client nicht leistet, verbindet dieser Client nicht mehr. Diese Konsole eingeschlossen.',
+  'config.risk.availability_encryption':
+    'Verschlüsselung zur Pflicht zu machen sperrt jeden Client aus, der sie nicht kann — auch Geräte wie Scanner und Drucker.',
+  'config.risk.wide_links_disabled_by_unix_extensions':
+    'Sind die Unix-Erweiterungen an, schaltet Samba „wide links“ für alle Freigaben ab. Eine Freigabe zeigt dann nicht mehr, was sie vorher zeigte, ohne dass an ihr etwas geändert wurde.',
+  'config.risk.exposure_wide_links':
+    'Symbolische Verweise dürfen dann aus der Freigabe herausführen. Wer die Freigabe erreicht, erreicht damit alles, worauf ein Verweis darin zeigt.',
+  'config.risk.quiet_guest_substitution':
+    'Fehlgeschlagene Anmeldungen werden dann still zum Gastkonto. Zugriffe erscheinen danach unter einem anderen Konto, als angemeldet wurde.',
+  'config.risk.printing_management_off':
+    'Windows-Clients können danach keine Druckertreiber und Warteschlangen mehr verwalten.',
+  'config.risk.identity_meaning_changes':
+    'Namen ohne Domänenteil meinen danach die eigene Domäne. Bereits vergebene Berechtigungen behalten ihre Schreibweise: dieselbe Zeichenkette meint dann etwas anderes.',
+  'config.risk.disconnects_this_console':
+    'Der Server trennt untätige Verbindungen nach dieser Zeit. Das betrifft auch die Verbindung, über die diese Konsole arbeitet.',
+  'config.risk.exposure_usershares':
+    'Damit dürfen auch Konten ohne Verwaltungsrechte Freigaben anlegen. Diese Konsole zeigt sie, verwalten kann sie sie nicht.',
+  'config.risk.registry_shares_toggle':
+    'Ausgeschaltet bedient der Server die Freigaben aus der Registry nicht mehr. Sie bleiben gespeichert und verschwinden vom Netz, und diese Konsole verwaltete danach etwas, das niemand sieht.',
+  'config.risk.standalone_domain_rename':
+    'Damit wandert der Arbeitsgruppen- bzw. Domänenname. Auf einem eigenständigen Server ist das eine Umbenennung; Clients finden ihn danach unter dem alten Namen nicht mehr.',
+
+  'config.live.stored': 'hier gespeichert',
+  'config.live.inForce': 'in Kraft',
+  'config.live.source.srvsvc': 'was der Server meldet',
+  'config.live.source.session_workgroup': 'womit diese Sitzung geöffnet wurde',
+  'config.live.source.session_mode': 'wie sich diese Sitzung angemeldet hat',
+  'config.live.source.observed': 'beobachtet, nicht abgefragt',
+  'config.live.unreadable': 'Der Server hat diese Abfrage abgelehnt.',
+
+  'config.idmap': 'idmap-Zuordnung',
+  'config.idmap.empty':
+    'Hier ist nichts in der Registry gespeichert. Der übliche Ort für idmap config ist die Text-smb.conf; leer heißt hier also „nichts in der Registry“ und nicht „kein idmap eingerichtet“.',
+  'config.notApplicable': 'Für diese Art Server ohne Bedeutung',
+  'config.notApplicable.why':
+    'Gespeichert und angezeigt, auf einem Server dieser Art aber wirkungslos. Wegzulassen machte die Anzeige der übrigen Optionen zur Halbwahrheit.',
+  'config.otherOptions': 'Weitere gespeicherte Optionen',
+  'config.otherOptions.why':
+    'Diese Optionen kennt SAMFSCON nicht. Sie stehen in der Registry dieses Servers und bleiben von hier aus unverändert.',
+
+  'config.printing.noPrinterShares': 'Dieser Server veröffentlicht keine Druckerfreigaben.',
+  'config.printing.unknown':
+    'Ob dieser Server Druckerfreigaben veröffentlicht, ließ sich nicht feststellen: die Freigabeliste war nicht lesbar.',
+
+  'config.revert': 'Verwerfen',
+  'config.revert.why':
+    'Setzt das Formular auf die zuletzt gelesenen Werte zurück. Das geht, solange diese Seite offen ist und die Verbindung steht; Gespeichertes rückgängig machen kann diese Konsole nicht.',
+  'config.confirmTitle': 'Änderung bestätigen',
+  'config.confirmIntro': 'Diese Änderungen können den Zugang zu diesem Server verändern:',
+  'config.confirmProceed': 'Trotzdem speichern',
+  'config.unwritable': 'Dieses Konto darf die Einstellungen dieses Servers nicht ändern.',
+
+  'caps.note.registry_sections_unreadable':
+    'Die Liste der Registry-Abschnitte ließ sich nicht lesen.',
+  'caps.note.global_section_unreadable':
+    'Der global-Abschnitt ließ sich nicht lesen.',
+  'caps.note.live_value_unreadable':
+    'Der Server hat die Abfrage für {option} abgelehnt.',
+  'caps.note.own_address_ambiguous':
+    'Diese Konsole hat mehrere Verbindungen zum Server. Welche Adresse hosts allow träfe, ist damit nicht eindeutig.',
+  'caps.note.own_address_unknown':
+    'Unter welcher Adresse der Server diese Konsole sieht, ließ sich nicht feststellen.',
+  'caps.note.printer_shares_unknown':
+    'Die Freigabeliste war nicht lesbar; ob es Druckerfreigaben gibt, bleibt offen.',
+  'caps.note.capabilities_unreadable':
+    'Was dieses Konto auf diesem Server darf, ließ sich nicht feststellen.',
+
+  'error.global_section_absent':
+    'Dieser Server hat keinen global-Abschnitt in seiner Registry-Konfiguration.',
+  'error.global_section_absent.hint':
+    'Er lässt sich anlegen. Das ändert aber nichts, solange die smb.conf des Servers nicht „include = registry“ vor den Zeilen enthält, die dieselben Optionen setzen.',
+  'error.global_section_unknown':
+    'Ob dieser Server einen global-Abschnitt in der Registry führt, ist unbekannt.',
+  'error.global_section_unknown.hint':
+    'Die Abschnittsliste war nicht lesbar, deshalb wurde nichts geschrieben. Das ist nicht dasselbe wie „es gibt keinen“.',
+  'error.confirmation_required':
+    'Diese Änderung betrifft eine Option, die bestätigt werden muss.',
+  'error.dialect_below_console_floor':
+    'Mit dieser Obergrenze käme diese Konsole nicht mehr an den Server.',
+  'error.dialect_below_console_floor.hint':
+    'SAMFSCON verhandelt nicht herunter. Zurückstellen ließe sich das danach nur mit einer Sitzung auf dem Server selbst.',
+  'error.dialect_window_empty':
+    'Mindest- und Höchstdialekt lassen zusammen keinen einzigen Dialekt übrig.',
+  'error.hosts_allow_excludes_console':
+    'Diese Liste enthält die Adresse nicht, unter der der Server diese Konsole sieht.',
+  'error.hosts_allow_excludes_console.hint':
+    'Nachgesehen, nicht vermutet: keine der Angaben trifft zu. Die Adresse ergänzen — es ist die des SAMFSCON-Containers, nicht die des Arbeitsplatzes.',
+  'error.hosts_allow_undecidable':
+    'Ob diese Liste diese Konsole weiter zulässt, ließ sich nicht entscheiden.',
+  'error.hosts_allow_undecidable.hint':
+    'Nicht dasselbe wie ausgeschlossen: es wurde nicht geprüft, nicht durchgefallen. Bestätigen speichert die Liste trotzdem.',
+  'error.hosts_deny_includes_console':
+    'Diese Liste nennt die Adresse, unter der der Server diese Konsole sieht, und keine Zulassungsliste holt sie zurück.',
+  'error.hosts_deny_undecidable':
+    'Ob diese Liste diese Konsole aussperrt, ließ sich nicht entscheiden.',
+  'error.option_not_applicable':
+    'Diese Option hat auf einem Server dieser Art keine Wirkung.',
+  'error.unknown_option':
+    'Diese Option kennt SAMFSCON nicht.',
+
   // -- errors --------------------------------------------------------------
   'error.kerberos_needs_a_name': 'Kerberos braucht den Namen des Servers, bekannt ist nur seine Adresse.',
   'error.kerberos_needs_a_name.hint':
@@ -1170,6 +1358,192 @@ export const en: Record<MessageKey, string> = {
     'The connection exposes no session key, so a password cannot be encrypted.',
   'error.password_encryption_failed': 'The password could not be encrypted for transport.',
   'error.samr_password_unsupported': 'This Samba build does not support setting the password.',
+
+  'config.group.server': 'Server',
+  'config.group.protocol': 'Protocol',
+  'config.group.access': 'Access',
+  'config.group.files': 'Files',
+  'config.group.printing': 'Printing',
+  'config.group.winbind': 'Winbind',
+  'config.group.advanced': 'Advanced',
+
+  'config.registryOnly':
+    'This page shows and changes only what is in the registry configuration. SAMFSCON does not read the text smb.conf: an empty field means ’not set here’, not ’not set’.',
+  'config.notApplied':
+    'Saved changes take effect only once Samba re-reads its configuration. SAMFSCON can neither trigger that nor restart anything.',
+  'config.notApplied.faster': 'On the server the quickest route is: smbcontrol all reload-config',
+  'config.notApplied.restart':
+    'Options marked ’restart required’ need the named daemon restarted even after that.',
+  'config.filesTabNote':
+    'These are the defaults for every share. A share that sets the same option itself wins.',
+
+  'config.sectionAbsent': 'This server has no global section in its registry configuration.',
+  'config.sectionUnknown':
+    'Whether this server keeps a global section in its registry could not be established. That is not the same as it having none.',
+  'config.createSection': 'Create the section',
+  'config.createSection.explain':
+    'Creating it changes nothing unless the server’s smb.conf has ’include = registry’, and has it before the lines that set the same options. SAMFSCON cannot read that file, so it cannot check.',
+  'config.createSection.confirm': 'Create it anyway',
+
+  'config.inForce.confirmed':
+    'The server reports what is stored here: the registry configuration is being read.',
+  'config.inForce.contradicted':
+    'The server reports something other than what is stored here. Most likely ’include = registry’ is missing from the text smb.conf, or a line there overrides it.',
+  'config.inForce.unknown.not_stored':
+    'Whether the registry configuration is read at all is open: nothing is stored that could be compared against it.',
+  'config.inForce.unknown.variable_expansion':
+    'Whether the registry configuration is read is open: the stored value contains a variable and the server reports it expanded.',
+  'config.inForce.unknown.indistinguishable_from_default':
+    'Whether the registry configuration is read is open: the stored and the reported value are both Samba’s default, and agreement then proves nothing.',
+  'config.inForce.unknown.live_unreadable':
+    'Whether the registry configuration is read is open: the server refused the query.',
+
+  'config.verify.applied_confirmed': 'Saved, and the server already reports the new value.',
+  'config.verify.not_yet_visible':
+    'Saved. The server still reports ’{live}’ rather than ’{stored}’: either it has not re-read its configuration, or the text smb.conf sets the same option. This console cannot tell the two apart.',
+  'config.verify.not_comparable': 'Saved. Whether it took effect could not be checked from here.',
+
+  'config.notSetHere': 'not set here',
+  'config.notSetHere.why':
+    'Not in the registry configuration. Whether the text smb.conf sets it is something this console cannot see.',
+  'config.defaultIs': 'With nothing set, Samba’s default applies: {value}',
+  'config.defaultNote.compiled_in':
+    'With nothing set the compiled-in default applies, and no RPC interface reports what that is.',
+  'config.defaultNote.from_hostname':
+    'With nothing set Samba derives the value from the host name.',
+  'config.unlistedValue': 'stored, and not among the choices',
+
+  'config.effect.connection': 'applies to new connections',
+  'config.effect.reload': 'applies once the configuration is re-read',
+  'config.effect.restart': 'restart required',
+  'config.effect.daemons': 'affects {names}',
+  'config.readOnly': 'read-only',
+  'config.risky': 'risky',
+
+  'config.readOnly.machine_account_identity':
+    'This name is the machine account’s identity. It is set when the server joins; changing it here would break the trust.',
+  'config.readOnly.join_has_no_rpc':
+    'The security mode is set when the server joins a domain. There is no RPC interface for it; that happens on the server itself, with net ads join.',
+  'config.readOnly.member_workgroup_is_the_join':
+    'On a domain member this is the domain the server joined. Changing it here would break the join.',
+  'config.readOnly.bound_at_startup':
+    'Samba evaluates this at startup. A value written here would show something other than what applies until a restart this console cannot trigger.',
+  'config.readOnly.hides_configuration':
+    'This diverts the configuration into files this console cannot read. It would go on showing what is here while the server did something else.',
+  'config.readOnly.invalidates_stored_names':
+    'Every name already stored is written with the current separator. Changing it makes them invalid.',
+  'config.readOnly.no_value_improves_on_the_default':
+    'Samba’s default has beaten hand-tuning for years. The option is listed because old servers have it set, not because it should be.',
+  'config.readOnly.idmap_remaps_existing_files':
+    'The idmap ranges decide which Unix id belongs to which domain account. Moving them reassigns existing files to different accounts.',
+
+  'config.risk.lockout_hosts':
+    'This list decides who reaches the server. The server sees this console at {address}; leave that address out and the next connection from here is gone.',
+  'config.risk.lockout_dialect_floor':
+    'A server demanding a higher dialect than a client speaks locks that client out. SAMFSCON speaks {floor} at the lowest.',
+  'config.risk.lockout_dialect_ceiling':
+    'A ceiling below {floor} puts the server out of this console’s reach, and this setting with it.',
+  'config.risk.lockout_signing':
+    'A server demanding signing a client cannot do locks that client out. This console included.',
+  'config.risk.availability_encryption':
+    'Making encryption mandatory locks out every client that cannot do it, devices such as scanners and printers included.',
+  'config.risk.wide_links_disabled_by_unix_extensions':
+    'With the Unix extensions on, Samba turns ’wide links’ off for every share. A share then stops showing what it showed before, without anything about it having changed.',
+  'config.risk.exposure_wide_links':
+    'Symbolic links may then lead out of the share. Whoever reaches the share reaches everything a link inside it points at.',
+  'config.risk.quiet_guest_substitution':
+    'Failed logins then quietly become the guest account. Access shows up under an account other than the one that signed in.',
+  'config.risk.printing_management_off':
+    'Windows clients can then no longer manage printer drivers and queues.',
+  'config.risk.identity_meaning_changes':
+    'Names without a domain part then mean the server’s own domain. Permissions already granted keep their spelling, so the same string comes to mean something else.',
+  'config.risk.disconnects_this_console':
+    'The server drops idle connections after this long. That includes the connection this console works over.',
+  'config.risk.exposure_usershares':
+    'This lets accounts without administrative rights create shares. This console shows them and cannot manage them.',
+  'config.risk.registry_shares_toggle':
+    'Turned off, the server stops serving the shares kept in the registry. They stay stored and vanish from the network, and this console would go on managing something nobody can see.',
+  'config.risk.standalone_domain_rename':
+    'This moves the workgroup or domain name. On a standalone server it is a rename, and clients no longer find it under the old one.',
+
+  'config.live.stored': 'stored here',
+  'config.live.inForce': 'in force',
+  'config.live.source.srvsvc': 'what the server reports',
+  'config.live.source.session_workgroup': 'what this session was opened with',
+  'config.live.source.session_mode': 'how this session authenticated',
+  'config.live.source.observed': 'observed, not asked',
+  'config.live.unreadable': 'The server refused this query.',
+
+  'config.idmap': 'idmap ranges',
+  'config.idmap.empty':
+    'Nothing here is stored in the registry. The usual place for idmap config is the text smb.conf, so this being empty means ’nothing in the registry’, not ’no idmap configured’.',
+  'config.notApplicable': 'Not applicable to this kind of server',
+  'config.notApplicable.why':
+    'Stored and shown, and without effect on a server of this kind. Leaving it out would make the display of the rest a half-truth.',
+  'config.otherOptions': 'Other stored options',
+  'config.otherOptions.why':
+    'SAMFSCON does not know these options. They are in this server’s registry and nothing here changes them.',
+
+  'config.printing.noPrinterShares': 'This server publishes no printer shares.',
+  'config.printing.unknown':
+    'Whether this server publishes printer shares could not be established: the share list was not readable.',
+
+  'config.revert': 'Discard',
+  'config.revert.why':
+    'Puts the form back to the values last read. That works as long as this page stays open and the connection lasts; what is saved, this console cannot undo.',
+  'config.confirmTitle': 'Confirm this change',
+  'config.confirmIntro': 'These changes can alter access to this server:',
+  'config.confirmProceed': 'Save anyway',
+  'config.unwritable': 'This account may not change this server’s settings.',
+
+  'caps.note.registry_sections_unreadable':
+    'The list of registry sections could not be read.',
+  'caps.note.global_section_unreadable':
+    'The global section could not be read.',
+  'caps.note.live_value_unreadable':
+    'The server refused the query for {option}.',
+  'caps.note.own_address_ambiguous':
+    'This console has several connections to the server, so which address hosts allow would match is not decided.',
+  'caps.note.own_address_unknown':
+    'The address the server sees this console at could not be established.',
+  'caps.note.printer_shares_unknown':
+    'The share list was not readable, so whether there are printer shares is open.',
+  'caps.note.capabilities_unreadable':
+    'What this account may do on this server could not be established.',
+
+  'error.global_section_absent':
+    'This server keeps no global section in its registry configuration.',
+  'error.global_section_absent.hint':
+    'It can be created. That changes nothing unless the server’s smb.conf has ’include = registry’ before the lines setting the same options.',
+  'error.global_section_unknown':
+    'Whether this server keeps a global section in its registry is unknown.',
+  'error.global_section_unknown.hint':
+    'The section list could not be read, so nothing was written. That is not the same as there being none.',
+  'error.confirmation_required':
+    'This change touches an option that has to be confirmed.',
+  'error.dialect_below_console_floor':
+    'This console could not reconnect to a server with that maximum dialect.',
+  'error.dialect_below_console_floor.hint':
+    'SAMFSCON does not negotiate down. Putting it back would then need a shell on the server itself.',
+  'error.dialect_window_empty':
+    'The minimum and maximum dialect leave no dialect at all between them.',
+  'error.hosts_allow_excludes_console':
+    'This list does not include the address the server sees this console at.',
+  'error.hosts_allow_excludes_console.hint':
+    'Checked rather than assumed: none of the entries matches. Add the address, which is the SAMFSCON container’s and not the workstation’s.',
+  'error.hosts_allow_undecidable':
+    'Whether this list still admits this console could not be decided.',
+  'error.hosts_allow_undecidable.hint':
+    'Not the same as excluded: this was not checked, not failed. Confirming saves the list all the same.',
+  'error.hosts_deny_includes_console':
+    'This list names the address the server sees this console at, and no allow list brings it back.',
+  'error.hosts_deny_undecidable':
+    'Whether this list shuts this console out could not be decided.',
+  'error.option_not_applicable':
+    'This option has no effect on a server of this kind.',
+  'error.unknown_option':
+    'SAMFSCON does not know this option.',
+
 
   'error.kerberos_needs_a_name': 'Kerberos needs the server’s name, and only its address is known.',
   'error.kerberos_needs_a_name.hint':

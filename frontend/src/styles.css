@@ -1018,7 +1018,8 @@ body.is-resizing { cursor: col-resize; user-select: none; }
 .diagnostics,
 .files,
 .sessions,
-.accounts { display: flex; flex-direction: column; min-height: 0; flex: 1; }
+.accounts,
+.config { display: flex; flex-direction: column; min-height: 0; flex: 1; }
 
 /* Findings: a stack of cards, each carrying its own evidence. The scroll is
    the shared .table-scroll, so a long report behaves like a long table and the
@@ -1142,3 +1143,19 @@ body.is-resizing { cursor: col-resize; user-select: none; }
   color: var(--text-muted);
   font-size: 0.75em;
 }
+
+/* The reference line under a global field. Under, not beside, and quieter than
+   the doc sentence: it says what Samba does when nothing sets the option, which
+   is a statement about Samba and not about this server. Beside the control it
+   read as this server's value, which is the one thing this view must never
+   say. */
+.config__default { display: block; color: var(--text-muted); font-size: 0.8em; }
+
+/* The effect badges. Wraps, because "Neustart nötig · betrifft smbd, nmbd,
+   winbindd" is long and a nowrap row pushed the field's own label off the
+   pane. */
+.config__badges { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+
+/* The read notes, one per line and quiet. They are what could not be looked at,
+   which is not a finding about the server and must not be styled like one. */
+.config .notes { list-style: none; margin: 0 0 8px; padding: 0; }

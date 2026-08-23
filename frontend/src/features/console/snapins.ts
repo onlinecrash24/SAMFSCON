@@ -109,9 +109,11 @@ export const SNAPINS: Snapin[] = [
     id: 'config',
     label: 'snapin.config',
     icon: 'container',
-    available: false,
+    available: true,
     note: 'snapin.config.note',
-    // One form.
+    // One form in one column. The seven tabs are this console's navigation, so
+    // a tree would be a second one saying the same thing; and a global option
+    // has no sub-object to open in a detail pane.
     panes: { tree: false, detail: false },
   },
 ]

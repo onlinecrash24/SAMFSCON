@@ -15,6 +15,10 @@ import type {
   AppInfo,
   DirectoryListing,
   EffectiveAccess,
+  GlobalConfig,
+  GlobalConfigResult,
+  GlobalConfigUpdate,
+  GlobalOptionSpec,
   LocalAccount,
   LocalGroup,
   LoginOptions,
@@ -111,6 +115,24 @@ export const api = {
 
   deleteShare: (name: string) =>
     http.delete<{ name: string; status: string }>(`/shares/${param(name)}`),
+
+  // -- server settings -----------------------------------------------------
+
+  config: () => http.get<GlobalConfig>('/config'),
+
+  /**
+   * The global options, resolved against the kind of server this session is
+   * signed in to. The mode is not a parameter — the caller cannot choose what
+   * it is connected to, and a mode in the query string would be a fact with
+   * two owners. It belongs in the cache key all the same.
+   */
+  configCatalogue: (language: string) =>
+    http.get<{ options: GlobalOptionSpec[]; mode: string }>(
+      `/config/catalogue?language=${param(language)}`,
+    ),
+
+  updateConfig: (changes: GlobalConfigUpdate) =>
+    http.patch<GlobalConfigResult>('/config', changes),
 
   // -- sessions and open files ---------------------------------------------
 

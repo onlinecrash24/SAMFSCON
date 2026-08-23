@@ -17,6 +17,7 @@ import {
   readConsoleLocation,
   writeConsoleLocation,
 } from './consoleLocation'
+import { SNAPINS } from '../features/console/snapins'
 
 const KEY = 'samfscon.console'
 
@@ -69,8 +70,37 @@ describe('a value that is not what we wrote', () => {
   it('refuses a console that exists but is not built yet', () => {
     // Restoring one would land somebody on a placeholder they never chose,
     // which reads as the console having lost their work.
-    entries.set(KEY, JSON.stringify({ snapin: 'config', selected: null }))
+    //
+    // Every console is built today, so the id comes from the declaration
+    // rather than from here: naming one would make this test pass for as long
+    // as that console stayed unbuilt and silently stop testing anything the
+    // day it shipped, which is exactly what happened to the `config` this
+    // line used to name.
+    const unbuilt = SNAPINS.find((snapin) => !snapin.available)
+    if (!unbuilt) return
+
+    entries.set(KEY, JSON.stringify({ snapin: unbuilt.id, selected: null }))
     expect(readConsoleLocation()).toEqual(DEFAULT)
+  })
+
+  it('checks availability and not merely existence', async () => {
+    // What the test above cannot assert while every console is built, so the
+    // declaration is replaced for this one case. Without the `available` check
+    // a console switched off between two visits restores onto its placeholder.
+    vi.resetModules()
+    vi.doMock('../features/console/snapins', () => ({
+      SNAPINS: [
+        { id: 'shares', label: 'snapin.shares', icon: 'share', available: true },
+        { id: 'gpo', label: 'snapin.gpo', icon: 'container', available: false },
+      ],
+    }))
+
+    const { readConsoleLocation: read } = await import('./consoleLocation')
+    entries.set(KEY, JSON.stringify({ snapin: 'gpo', selected: null }))
+    expect(read()).toEqual(DEFAULT)
+
+    vi.doUnmock('../features/console/snapins')
+    vi.resetModules()
   })
 
   it('drops the selection when the console is refused', () => {

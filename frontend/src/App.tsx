@@ -32,6 +32,7 @@ import {
   type ActionId,
 } from './features/console/menuActions'
 import { SNAPINS, panesFor, snapinById, type SnapinId } from './features/console/snapins'
+import { ServerSettingsView } from './features/config/ServerSettingsView'
 import { DiagnosticsView } from './features/diagnostics/DiagnosticsView'
 import { FilesView } from './features/files/FilesView'
 import { FolderWindow } from './features/files/FolderWindow'
@@ -350,6 +351,8 @@ function Console({ session }: { session: SessionInfo }) {
             />
           ) : snapin === 'diagnostics' ? (
             <DiagnosticsView />
+          ) : snapin === 'config' ? (
+            <ServerSettingsView onChanged={setNotice} />
           ) : snapin === 'accounts' && standalone ? (
             <AccountsView
               section={selected === 'groups' ? 'groups' : 'users'}
