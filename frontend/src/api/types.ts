@@ -213,6 +213,8 @@ export interface Capabilities {
   registry_shares_served: boolean | null
   has_disk_operator: boolean | null
   disk_operators: string[]
+  /** The same holders by SID. A name is localised; a SID is not. */
+  disk_operator_sids: string[]
   /** Creating, changing and deleting shares — a registry write. */
   can_manage_shares: boolean | null
   /**

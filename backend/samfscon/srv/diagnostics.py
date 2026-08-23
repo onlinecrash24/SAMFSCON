@@ -76,7 +76,17 @@ class Capabilities:
     # this console cannot read. It is observed rather than asked.
     registry_shares_served: bool | None = None
     has_disk_operator: bool | None = None
+    # Who holds it, for the banner that names them.
     disk_operators: list[str] = field(default_factory=list)
+    # And their SIDs, for anything that has to *decide* something about them.
+    #
+    # Kept beside the names rather than instead of them, because the two are
+    # for different readers. A name is what a person recognises. A SID is the
+    # only thing a rule can match on: the same group is `BUILTIN\Users` on one
+    # server and `VORDEFINIERT\Benutzer` on the next, so a check written
+    # against names would miss it on a localised server — and fire on any
+    # server where somebody happened to call a group "Users".
+    disk_operator_sids: list[str] = field(default_factory=list)
     notes: list[Note] = field(default_factory=list)
 
     @property
@@ -120,6 +130,7 @@ class Capabilities:
             "registry_shares_served": self.registry_shares_served,
             "has_disk_operator": self.has_disk_operator,
             "disk_operators": list(self.disk_operators),
+            "disk_operator_sids": list(self.disk_operator_sids),
             "can_manage_shares": self.can_manage_shares,
             "can_manage_share_permissions": self.can_manage_share_permissions,
             "notes": [note.describe() for note in self.notes],
@@ -255,6 +266,7 @@ def _check_privilege(conn: ServerConnection, caps: Capabilities, sid: str | None
         return
 
     caps.disk_operators = [entry["name"] for entry in holders if entry.get("name")]
+    caps.disk_operator_sids = [entry["sid"] for entry in holders if entry.get("sid")]
 
     if sid is None:
         caps.notes.append(Note("sid_unknown"))

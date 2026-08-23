@@ -523,6 +523,57 @@ def translate(exc: BaseException) -> SamfsconError:
     return SamfsconError("An unexpected error occurred.", detail=text)
 
 
+def status_symbol(exc: BaseException) -> str | None:
+    """The NT_STATUS or WERR symbol behind an exception, however it spells itself.
+
+    :func:`translate` maps the symbol to one of this module's codes and then
+    drops it, which is right for anything that reaches a person: "the share does
+    not exist" is more use than NT_STATUS_BAD_NETWORK_NAME. A caller deciding
+    what to do next sometimes needs the other one — telling BAD_NETWORK_NAME
+    from ACCESS_DENIED is the difference between "there is no such share" and
+    "there is one and this account may not open it", and both translate to codes
+    that were chosen for reading rather than for branching on.
+
+    Public rather than copied at the call site, because the awkward part is
+    already solved here: some bindings never put the symbol in the message at
+    all. An ``NTSTATUSError`` reads ``(3221225539, 'A file cannot be opened…')``
+    — a number and a sentence — and the number is looked up in the same tables
+    :func:`translate` uses.
+
+    ``None`` when the exception carries no status at all, which is the honest
+    answer for a timeout or a socket error. It is also the answer in two cases
+    that are *not* about the server, and a caller treating None as "not that
+    status" would be reading either of them as a fact:
+
+    * a symbol that arrives only as a number and is not one of the ones mapped
+      above — the numeric tables are derived from those symbols and know no
+      others;
+    * any number at all on a host without the Samba bindings, because the
+      tables are read out of ``samba.ntstatus`` and ``samba.werror`` at
+      runtime and are empty without them. The container has them; a unit test
+      does not.
+    """
+    text = str(exc)
+
+    # In the message. Any symbol, mapped or not — an unmapped one is still the
+    # thing an administrator would look up.
+    match = _NT_STATUS_RE.search(text) or _WERROR_RE.search(text)
+    if match is not None:
+        return match.group(0)
+
+    # Not in the message. Some bindings pass the number and a sentence and
+    # never the symbol; each table gets its own pattern, even though only the
+    # numeric half can match here.
+    for pattern, table, numeric in (
+        (_NT_STATUS_RE, _NT_STATUS, _numeric_nt_status),
+        (_WERROR_RE, _WERROR, _numeric_werror),
+    ):
+        found = _status_name(exc, text, pattern, table, numeric)
+        if found is not None:
+            return found
+    return None
+
+
 def _status_name(
     exc: BaseException,
     text: str,
