@@ -35,8 +35,8 @@ Each entry is the release note as it was written at the time, unedited. Where
 one says something was not verified, that sentence is part of the record and
 stays.
 
-Images for every version are on GHCR: `ghcr.io/onlinecrash24/samfscon:0.5.9`
-pins one exactly, `:0.5` follows the minor series, `:latest` the newest
+Images for every version are on GHCR: `ghcr.io/onlinecrash24/samfscon:0.2.0`
+pins one exactly, `:0.2` follows the minor series, `:latest` the newest
 release.
 """
 
@@ -54,8 +54,8 @@ def released_tags() -> list[tuple[str, str]]:
     """Every ``v*`` tag, newest first, as (tag, date).
 
     Version sort rather than date sort: two releases on one afternoon get the
-    same date, and 0.5.10 has to land above 0.5.9 rather than between 0.5.0
-    and 0.5.2.
+    same date, and 0.2.10 has to land above 0.2.9 rather than between 0.2.0
+    and 0.2.2.
     """
     lines = git(
         "for-each-ref", "refs/tags/v*",
@@ -82,7 +82,7 @@ def section(tag: str, date: str) -> str:
     version = tag.lstrip("v")
     lines = [f"## {version} — {date}", ""]
 
-    # The subject is "SAMFSCON 0.5.9" on all of them, which the heading already
+    # The subject is "SAMFSCON 0.2.0" on all of them, which the heading already
     # says. If one ever isn't, it is carried into the body rather than dropped:
     # losing a line silently is the one thing this must not do.
     if not re.fullmatch(rf"SAMFSCON\s+{re.escape(version)}", subject.strip()):
