@@ -7,8 +7,14 @@
  * reports.
  *
  * Deliberately a sibling of SAMADCON's mark rather than a new idea: same
- * plate, same bracket frame, same terminals, with the glyph swapped. Two
- * consoles from one project should look like they came from one project.
+ * plate, same bracket frame, with the glyph swapped. Two consoles from one
+ * project should look like they came from one project.
+ *
+ * The light and dark files carry their own plate. The transparent variants in
+ * docs/brand/ do not, and the lockup among them draws its wordmark in
+ * `currentColor` — which is right for an inline SVG and wrong here: an SVG
+ * loaded through <img> has no access to the page's colour and would render the
+ * name in black. Hence these two and not those.
  */
 
 import lockupDark from '../assets/samfscon-lockup-dark.svg'
@@ -27,8 +33,8 @@ export function LogoLockup({ className }: { className?: string }) {
         src={lockupLight}
         alt={ALT}
         className={className ? `logo-lockup ${className}` : 'logo-lockup'}
-        width={640}
-        height={132}
+        width={420}
+        height={120}
       />
     </picture>
   )
