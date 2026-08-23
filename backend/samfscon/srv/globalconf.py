@@ -39,6 +39,7 @@ option is, and the view carries that as a badge rather than as a footnote.
 from __future__ import annotations
 
 import ipaddress
+import logging
 import re
 from dataclasses import dataclass
 from typing import Any
@@ -46,6 +47,8 @@ from typing import Any
 from samfscon.config import MODE_AD_MEMBER
 from samfscon.core.errors import InvalidRequest
 from samfscon.srv.shareconf import TYPE_BOOL, TYPE_CHOICE, TYPE_INT, TYPE_LIST, TYPE_TEXT
+
+logger = logging.getLogger(__name__)
 
 # The tabs.
 GROUP_SERVER = "server"
@@ -124,6 +127,13 @@ DEFAULT_NOTES = ("compiled_in", "from_hostname")
 NOT_WRITABLE_PREFIXES: dict[str, str] = {
     "idmap config": "idmap_remaps_existing_files",
 }
+
+# The token that lifts the undecidable-hosts refusal. Deliberately not the
+# option's own name: confirming `hosts allow` says "I know what this option
+# does", and confirming this says "I accept that you could not establish
+# whether it shuts me out". One standing for the other would mean every
+# ordinary use of the option waived the check meant to catch a lockout.
+UNDECIDABLE_CONFIRM = "hosts allow:undecidable"
 
 # The dialects, oldest first. The order is what makes a floor-above-ceiling
 # comparison arithmetic rather than a table of special cases.
@@ -1212,18 +1222,546 @@ def hosts_verdict(value: str, address: str | None) -> dict[str, Any]:
     }
 
 
+# ---------------------------------------------------------------------------
+# Reading
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class LiveValue:
+    """What the server reports for an option, as against what is stored.
+
+    ``readable`` is the field that earns its place. A refused endpoint leaves
+    ``value`` at ``None``, and without the flag beside it that is
+    indistinguishable from "the server reports nothing", which would let the
+    cross-check below conclude a mismatch out of a permission gap.
+    """
+
+    option: str
+    value: str | None
+    readable: bool
+    source: str
+
+    def describe(self) -> dict[str, Any]:
+        return {
+            "option": self.option,
+            "value": self.value,
+            "readable": self.readable,
+            "source": self.source,
+        }
+
+
+@dataclass
+class GlobalConfig:
+    """The server's global section, as far as it can be established."""
+
+    # True  — the section list was read and named a `global` key
+    # False — the section list was read and did not
+    # None  — the section list could not be read, which is not the same as none
+    section_present: bool | None
+    stored: dict[str, str]
+    known: dict[str, str]
+    extra: dict[str, str]
+    # Catalogued, not applicable to this kind of server, and stored anyway.
+    # Shown read-only rather than dropped: a console that hid half a
+    # configuration would be lying about the other half.
+    not_applicable: dict[str, str]
+    idmap: dict[str, str]
+    live: list[LiveValue]
+    in_force: bool | None
+    in_force_evidence: list[dict[str, Any]]
+    own_client_address: str | None
+    own_client_address_confidence: str
+    mode: str
+    notes: list[Any]
+
+    def describe(self) -> dict[str, Any]:
+        return {
+            "section_present": self.section_present,
+            "stored": dict(self.stored),
+            "known": dict(self.known),
+            "extra": dict(self.extra),
+            "not_applicable": dict(self.not_applicable),
+            "idmap": dict(self.idmap),
+            "live": [value.describe() for value in self.live],
+            "in_force": self.in_force,
+            "in_force_evidence": list(self.in_force_evidence),
+            "own_client_address": self.own_client_address,
+            "own_client_address_confidence": self.own_client_address_confidence,
+            "mode": self.mode,
+            "notes": [note.describe() for note in self.notes],
+        }
+
+
+def split(stored: dict[str, str], mode: str) -> tuple[dict, dict, dict, dict]:
+    """The stored values, sorted into what the interface does with each.
+
+    Four buckets rather than shareconf's two, because two of them are things
+    this console must show and must not offer: an option that is catalogued but
+    meaningless on this kind of server, and the generated ``idmap config`` names
+    that have no single field to be.
+    """
+    known: dict[str, str] = {}
+    extra: dict[str, str] = {}
+    not_applicable: dict[str, str] = {}
+    idmap: dict[str, str] = {}
+
+    for name, value in stored.items():
+        lowered = name.strip().lower()
+        if any(lowered.startswith(prefix) for prefix in NOT_WRITABLE_PREFIXES):
+            idmap[name] = value
+            continue
+        option = BY_NAME.get(lowered)
+        if option is None:
+            extra[name] = value
+        elif option.mode_only is not None and option.mode_only != mode:
+            not_applicable[name] = value
+        else:
+            known[name] = value
+
+    return known, extra, not_applicable, idmap
+
+
+def live_values(conn: Any) -> list[LiveValue]:
+    """What the server reports for the options an endpoint answers for.
+
+    A function of its own rather than :func:`diagnostics.server_facts`, for two
+    reasons. That one raises when level 102 is refused — it needs more rights
+    than 101 — and a permission gap has to cost one row here, not the page. And
+    it asks for 102 only, where level 101 carries the server name and comment
+    too, which the anonymous probe has been proving readable since the
+    beginning. So: 102, then 101, then report the rows unreadable and carry on.
+    """
+    from samfscon.srv import shares as shares_module
+    from samfscon.srv.discovery import _text
+
+    comment: str | None = None
+    server_name: str | None = None
+    readable = False
+
+    for level in (102, 101):
+        try:
+            raw = conn.srvsvc.NetSrvGetInfo(None, level)
+        except Exception:
+            logger.debug("NetSrvGetInfo(%d) refused", level, exc_info=True)
+            continue
+        comment = _text(getattr(raw, "comment", None))
+        server_name = _text(getattr(raw, "server_name", None))
+        readable = True
+        break
+
+    try:
+        served: bool | None = shares_module.registry_shares_served(conn)
+    except Exception:
+        logger.debug("the registry-shares observation failed", exc_info=True)
+        served = None
+
+    return [
+        LiveValue("server string", comment, readable, "srvsvc.comment"),
+        LiveValue("netbios name", server_name, readable, "srvsvc.server_name"),
+        # Labelled honestly. Nothing on the authenticated connection asks LSA
+        # for the workgroup; this is what the session was opened with, and the
+        # administrator may have typed it at sign-in. Calling it an observation
+        # would be the console asserting something it never observed.
+        LiveValue("workgroup", conn.info.workgroup, True, "session.workgroup"),
+        LiveValue("security", conn.info.mode, True, "session.mode"),
+        LiveValue(
+            "registry shares",
+            None if served is None else ("yes" if served else "no"),
+            served is not None,
+            "observed.registry_shares_served",
+        ),
+    ]
+
+
+def in_force_check(
+    stored: dict[str, str], live: list[LiveValue]
+) -> tuple[bool | None, list[dict[str, Any]]]:
+    """Whether the server is reading its registry global section at all.
+
+    The whole detection mechanism, and it is deliberately narrow: one option,
+    ``server string``, compared with what the server reports. Everything else in
+    the registry could be written and ignored without any of it being visible.
+
+    Four things make the comparison prove nothing, and each is recorded rather
+    than silently skipped — a reader has to see that the question was asked.
+
+    Explicitly **not** evidence: the server serving registry *shares*. Samba's
+    ``registry shares = yes`` activates share sections independently of
+    ``include = registry``, so serving them proves one option is set somewhere
+    and says nothing about whether the global block is read. It is recorded with
+    that verdict so the consideration is visible.
+    """
+    evidence: list[dict[str, Any]] = []
+    reported = next((value for value in live if value.option == "server string"), None)
+
+    served = next((value for value in live if value.option == "registry shares"), None)
+    if served is not None:
+        evidence.append(
+            {
+                "check": "registry_shares_served",
+                "value": served.value,
+                "verdict": "proves_nothing",
+                "why": "registry_shares_is_independent_of_include_registry",
+            }
+        )
+
+    value = stored.get("server string")
+    if value is None:
+        evidence.append({"check": "server string", "verdict": "undecided", "reason": "not_stored"})
+        return None, evidence
+
+    if "%" in value:
+        # server string supports %h, %v and friends, and NetSrvGetInfo returns
+        # the expanded form. Comparing the two literally would report a
+        # perfectly healthy server as ignoring its registry.
+        evidence.append(
+            {
+                "check": "server string",
+                "stored": value,
+                "verdict": "undecided",
+                "reason": "variable_expansion",
+            }
+        )
+        return None, evidence
+
+    if reported is None or not reported.readable:
+        evidence.append(
+            {
+                "check": "server string",
+                "stored": value,
+                "verdict": "undecided",
+                "reason": "live_unreadable",
+            }
+        )
+        return None, evidence
+
+    default = BY_NAME["server string"].default
+    if value == default and reported.value == default:
+        # Agreement on the default proves nothing: both sides could be Samba's
+        # compiled-in value with nothing reading anything.
+        evidence.append(
+            {
+                "check": "server string",
+                "stored": value,
+                "live": reported.value,
+                "verdict": "undecided",
+                "reason": "indistinguishable_from_default",
+            }
+        )
+        return None, evidence
+
+    matched = reported.value == value
+    evidence.append(
+        {
+            "check": "server string",
+            "stored": value,
+            "live": reported.value,
+            "verdict": "confirms" if matched else "contradicts",
+        }
+    )
+    return matched, evidence
+
+
+def own_client_address(conn: Any) -> tuple[str | None, str]:
+    """The address this server currently records for this console's session.
+
+    The value ``hosts allow`` is matched against is the address the *server*
+    sees, which is the SAMFSCON container's — not the workstation the browser
+    is on. Naming the right one is the entire mitigation for the near-certain
+    mistake, so it is read rather than assumed.
+
+    Filtered by the account the server itself resolved, because that is the
+    name the session rows carry — not the one that was typed at sign-in.
+
+    Returns ``(address, confidence)``:
+
+    * ``one_session`` — exactly one distinct address for this account. Usable.
+    * ``several`` — more than one. Not usable: naming the wrong one would be
+      worse than naming none.
+    * ``unknown`` — no matching session, or the enumeration was refused.
+    """
+    from samfscon.srv import identity
+    from samfscon.srv import sessions as sessions_module
+
+    try:
+        account = identity.current_account(conn)
+    except Exception:
+        logger.debug("the signed-in account could not be resolved", exc_info=True)
+        return None, "unknown"
+
+    name = (account.get("name") or "").strip().lower()
+    if not name:
+        return None, "unknown"
+    # The session rows carry the bare account name; the resolved one may be
+    # qualified. Compare on the last component either way.
+    bare = name.rsplit("\\", 1)[-1]
+
+    try:
+        listed = sessions_module.list_sessions(conn)
+    except Exception:
+        logger.debug("the session list could not be read", exc_info=True)
+        return None, "unknown"
+
+    addresses = {
+        session.client
+        for session in listed
+        if session.client and (session.user or "").strip().lower().rsplit("\\", 1)[-1] == bare
+    }
+
+    if len(addresses) == 1:
+        return next(iter(addresses)), "one_session"
+    if len(addresses) > 1:
+        return None, "several"
+    return None, "unknown"
+
+
+def read(conn: Any) -> GlobalConfig:
+    """The global section, and everything needed to judge a write against it.
+
+    Every read in its own try. A failure appends a note and costs one field,
+    never the page — a view that silently omitted a failed section would read
+    as a clean bill of health.
+    """
+    from samfscon.srv import diagnostics, registry
+
+    notes: list[Any] = []
+    mode = conn.info.mode
+
+    # Absence is decided here and nowhere else. read_options catches NotFound
+    # and returns {}, so {} from it means either "no key" or "an empty key" —
+    # and deciding absence from that would be the seventh instance of this
+    # project's favourite mistake.
+    section_present: bool | None
+    try:
+        sections = registry.read_sections(conn)
+        section_present = any(name.strip().lower() == registry.GLOBAL_SECTION for name in sections)
+    except Exception:
+        logger.debug("the registry section list could not be read", exc_info=True)
+        notes.append(diagnostics.Note("registry_sections_unreadable"))
+        section_present = None
+
+    stored: dict[str, str] = {}
+    if section_present is not False:
+        try:
+            stored = registry.read_options(conn, registry.GLOBAL_SECTION)
+        except Exception:
+            logger.debug("the global section could not be read", exc_info=True)
+            notes.append(diagnostics.Note("global_section_unreadable"))
+
+    try:
+        live = live_values(conn)
+    except Exception:
+        logger.debug("the live values could not be read", exc_info=True)
+        notes.append(diagnostics.Note("live_value_unreadable", {"option": "all"}))
+        live = []
+
+    for value in live:
+        if not value.readable:
+            notes.append(diagnostics.Note("live_value_unreadable", {"option": value.option}))
+
+    address, confidence = own_client_address(conn)
+    if confidence == "several":
+        notes.append(diagnostics.Note("own_address_ambiguous"))
+    elif confidence == "unknown":
+        notes.append(diagnostics.Note("own_address_unknown"))
+
+    decided, evidence = in_force_check(stored, live)
+    known, extra, not_applicable, idmap = split(stored, mode)
+
+    return GlobalConfig(
+        section_present=section_present,
+        stored=stored,
+        known=known,
+        extra=extra,
+        not_applicable=not_applicable,
+        idmap=idmap,
+        live=live,
+        in_force=decided,
+        in_force_evidence=evidence,
+        own_client_address=address,
+        own_client_address_confidence=confidence,
+        mode=mode,
+        notes=notes,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Writing
+# ---------------------------------------------------------------------------
+
+
+def write(
+    conn: Any,
+    options: dict[str, str | None],
+    *,
+    confirm: frozenset[str] = frozenset(),
+    create_section: bool = False,
+    console_min_protocol: str | None = None,
+) -> dict[str, Any]:
+    """Change the global section, refusing what cannot be undone from here.
+
+    One read feeds validation, the gate and the verification, so the screen and
+    the write never describe two different moments.
+    """
+    from samfscon.core.errors import NotConfigured
+    from samfscon.srv import diagnostics, registry
+
+    caps = diagnostics.capabilities(conn)
+    diagnostics.require_share_management(caps)
+
+    current = read(conn)
+    checked = validate(options, mode=current.mode, confirm=confirm)
+
+    if console_min_protocol and isinstance(checked.get("server max protocol"), str):
+        check_console_floor(checked["server max protocol"], console_min_protocol)
+
+    _check_hosts(checked, current, confirm)
+
+    # The section gate. Three states and three answers, and the third is the
+    # one worth having: "could not read the section list" must not be treated
+    # as "there is one" or as "there is none".
+    if current.section_present is None:
+        raise NotConfigured(
+            "Whether this server keeps a global section in its registry is unknown.",
+            code="global_section_unknown",
+            hint=(
+                "The list of sections could not be read, so nothing is written. "
+                "That is not the same as there being no global section."
+            ),
+        )
+    if current.section_present is False and not create_section:
+        raise NotConfigured(
+            "This server keeps no global section in its registry configuration.",
+            code="global_section_absent",
+            hint=(
+                "Creating it changes nothing unless the server's smb.conf has "
+                "'include = registry' before the lines that set the same "
+                "options. SAMFSCON cannot read that file to check. Confirm to "
+                "create it anyway."
+            ),
+            context={"section": registry.GLOBAL_SECTION, "options": sorted(options)},
+        )
+
+    applied = registry.write_options(conn, registry.GLOBAL_SECTION, checked)
+    verification = _verify(conn, checked)
+
+    return {
+        "applied": applied,
+        "section_created": current.section_present is False,
+        "verification": verification,
+    }
+
+
+def _check_hosts(
+    checked: dict[str, str | None], current: GlobalConfig, confirm: frozenset[str]
+) -> None:
+    """Refuse a hosts list that would shut this console out.
+
+    Two answers, and the difference between them is the design. A list every
+    entry of which was decidable and none of which covers us is refused and
+    stays refused — we checked. A list that could not be decided is refused
+    once and lifted by confirming, because making it permanent would report
+    could-not-determine as is-so.
+
+    ``hosts deny`` is judged after ``hosts allow``, the way Samba applies them:
+    a deny covering our address is harmless when the allow also covers it.
+
+    The undecidable case needs its own confirmation token, not the option's.
+    Confirming ``hosts allow`` says "I know what this option does"; confirming
+    ``hosts allow:undecidable`` says "I accept that you could not establish
+    whether this shuts you out". Letting one stand for the other would mean
+    every ordinary use of the option silently waived the check that exists to
+    catch the lockout.
+    """
+    allow = checked.get("hosts allow")
+    if not isinstance(allow, str) or not allow.strip():
+        return
+
+    verdict = hosts_verdict(allow, current.own_client_address)
+    context = {
+        "option": "hosts allow",
+        "value": allow,
+        "address": current.own_client_address,
+        "address_confidence": current.own_client_address_confidence,
+        "undecidable_entries": verdict.get("undecidable", []),
+    }
+
+    if verdict["verdict"] == "excluded":
+        raise InvalidRequest(
+            "This list does not include the address the server sees this console at.",
+            code="hosts_allow_excludes_console",
+            context=context,
+        )
+
+    if verdict["verdict"] == "undecidable" and UNDECIDABLE_CONFIRM not in confirm:
+        raise InvalidRequest(
+            "Whether this list still admits this console could not be decided.",
+            code="hosts_allow_undecidable",
+            context={
+                **context,
+                "reason": verdict.get("reason"),
+                # What the interface has to send back to proceed.
+                "confirm_with": UNDECIDABLE_CONFIRM,
+            },
+        )
+
+
+def _verify(conn: Any, checked: dict[str, str | None]) -> dict[str, Any]:
+    """Ask the server what it reports now, once.
+
+    Three outcomes and no fourth. In particular there is no code meaning "the
+    write failed": a value that is stored and not yet reported has two causes —
+    smbd has not re-read its configuration, or the text smb.conf overrides it —
+    and this console can distinguish neither. The message names both, cheapest
+    to check first, exactly as the share-creation message already does.
+    """
+    written = checked.get("server string")
+    if not isinstance(written, str):
+        return {"code": "not_comparable", "reason": "no_live_source_among_written_options"}
+    if "%" in written:
+        return {"code": "not_comparable", "reason": "variable_expansion"}
+
+    try:
+        live = live_values(conn)
+    except Exception:
+        logger.debug("the verification read failed", exc_info=True)
+        return {"code": "not_comparable", "reason": "live_unreadable"}
+
+    reported = next((value for value in live if value.option == "server string"), None)
+    if reported is None or not reported.readable:
+        return {"code": "not_comparable", "reason": "live_unreadable"}
+
+    if reported.value == written:
+        return {"code": "applied_confirmed", "option": "server string", "value": written}
+    return {
+        "code": "not_yet_visible",
+        "option": "server string",
+        "stored": written,
+        "live": reported.value,
+    }
+
+
 __all__ = [
     "BY_NAME",
     "CATALOGUE",
     "GROUPS",
+    "GlobalConfig",
     "GlobalOption",
     "HostEntry",
+    "LiveValue",
     "check_console_floor",
     "covers",
     "describe_catalogue",
     "dialect_index",
     "hosts_verdict",
+    "in_force_check",
+    "live_values",
+    "own_client_address",
     "parse_host_entry",
+    "read",
     "safety_for",
+    "split",
     "validate",
+    "write",
 ]
