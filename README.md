@@ -249,7 +249,9 @@ Kerberos made unnecessary; guessing the other way would wait for a ticket no KDC
 | 1c | Permissions: share-level and file-level, with the effective-access calculation | built |
 | 1d | Sessions and open files, including force-closing one | built |
 | 1e | Local users and groups on a standalone server (SAMR) | built |
-| 2 | Global server settings, the diagnostics view, share templates | planned |
+| 2a | Global server settings, with the option catalogue and the lockout guards | built |
+| 2b | The diagnostics view: what stands out, and what nobody could look at | built |
+| 2c | Share templates | planned |
 
 **Verification against a live server is under way, and it has reached sign-in, the share list and
 the share write path.** Against a Samba AD member it has found a fault in each. The two at sign-in:

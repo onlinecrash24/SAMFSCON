@@ -31,9 +31,23 @@ this console does not offer is one somebody edits in smb.conf with a shell,
 which is a worse interface and a safer one.
 
 **And nothing here takes effect when it is saved.** SAMFSCON writes the
-registry; it cannot make Samba re-read it and cannot restart anything, because
-there is no RPC call for either. ``effect`` says which of the three kinds an
-option is, and the view carries that as a badge rather than as a footnote.
+registry and cannot make Samba re-read it.
+
+The reason used to be written down as "there is no RPC call for either", and
+that is wrong. Samba serves ``svcctl`` — ``EnumServicesStatusW``,
+``StartServiceW``, ``ControlService`` are all implemented and all remote. What
+is missing is something to point them at: Samba's service list is four
+pseudo-services (Spooler, NETLOGON, RemoteRegistry, WINS) plus whatever
+``svcctl list`` names in smb.conf, and ``smbd`` is not among them unless an
+administrator published it there — which needs a shell on the server.
+
+So the call exists and this server has nothing for it to act on. That is a
+narrower claim than the old one, it is the true one, and it is the difference
+between "impossible" and "not set up here" — which is the sort of thing an
+administrator can act on.
+
+``effect`` says which of the three kinds an option is, and the view carries
+that as a badge rather than as a footnote.
 """
 
 from __future__ import annotations

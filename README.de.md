@@ -261,7 +261,9 @@ hieße, auf ein Ticket zu warten, das kein KDC ausstellen wird.
 | 1c | Berechtigungen: Freigabe- und Dateiebene, mit der Berechnung der tatsächlichen Rechte | gebaut |
 | 1d | Sitzungen und offene Dateien, inklusive Erzwingen des Schließens | gebaut |
 | 1e | Lokale Benutzer und Gruppen auf einem eigenständigen Server (SAMR) | gebaut |
-| 2 | Globale Servereinstellungen, Diagnoseansicht, Freigabevorlagen | geplant |
+| 2a | Globale Servereinstellungen, mit Optionskatalog und Aussperr-Sicherungen | gebaut |
+| 2b | Diagnoseansicht: was auffällt, und was niemand ansehen konnte | gebaut |
+| 2c | Freigabevorlagen | geplant |
 
 **Die Verifikation gegen einen laufenden Server läuft und hat die Anmeldung, die Freigabenliste
 und den Schreibweg für Freigaben erreicht.** Gegen ein Samba-AD-Mitglied hat sie in jedem davon

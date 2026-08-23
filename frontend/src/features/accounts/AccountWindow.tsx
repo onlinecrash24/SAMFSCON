@@ -9,14 +9,21 @@
  * It holds an identity and fetches by it, like every window. So an account
  * renamed or removed from under this one says so on the next read instead of
  * showing what used to be true.
+ *
+ * Membership is edited here and nowhere else. The picker is the same one the
+ * permission editor uses, for the same reason both need it: a group can hold
+ * domain accounts, so the thing being added is a SID that has to be looked up
+ * rather than a name from a list this server holds.
  */
 
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useState } from 'react'
 
 import { api } from '../../api/endpoints'
 import type { LocalAccount, LocalGroup, Trustee } from '../../api/types'
-import { Badge, Icon, Spinner, TextRow } from '../../components/primitives'
+import { Badge, ErrorMessage, Icon, Spinner, TextRow } from '../../components/primitives'
 import { useI18n } from '../../i18n'
+import { TrusteePicker } from '../permissions/TrusteePicker'
 
 export function AccountWindow({
   of,
@@ -110,8 +117,34 @@ function UserSheet({ name, onAction }: { name: string; onAction: (id: string) =>
 
 function GroupSheet({ name }: { name: string }) {
   const { t } = useI18n()
+  const queryClient = useQueryClient()
+  const [adding, setAdding] = useState(false)
+  // A name the server could not resolve comes back from the picker with no
+  // SID, and membership is written by SID. Saying so beats a button that
+  // appears to do nothing.
+  const [unresolved, setUnresolved] = useState<string | null>(null)
   const groups = useQuery({ queryKey: ['localGroups'], queryFn: () => api.localGroups() })
   const group = groups.data?.entries.find((entry: LocalGroup) => entry.name === name)
+
+  // One call for both directions, because the endpoint takes both and reaching
+  // the desired state in one request is what stops a half-applied change.
+  const membership = useMutation({
+    mutationFn: ({ add, remove }: { add: string[]; remove: string[] }) =>
+      api.setGroupMembers(name, add, remove),
+    onSuccess: () => {
+      setAdding(false)
+      void queryClient.invalidateQueries({ queryKey: ['localGroups'] })
+    },
+  })
+
+  function add(trustee: Trustee) {
+    if (!trustee.sid) {
+      setUnresolved(trustee.name ?? '')
+      return
+    }
+    setUnresolved(null)
+    membership.mutate({ add: [trustee.sid], remove: [] })
+  }
 
   // Resolved only once there is something to resolve, and only for this group.
   // A local group can hold domain accounts, so these are not all local SIDs.
@@ -145,6 +178,14 @@ function GroupSheet({ name }: { name: string }) {
           <h3>{t('accounts.members')}</h3>
           {group.members.length === 0 && <p className="muted">{t('accounts.noMembers')}</p>}
           {members.isLoading && <Spinner label={t('status.loading')} />}
+          <ErrorMessage error={membership.error} onDismiss={() => membership.reset()} />
+          {unresolved !== null && (
+            <div className="alert alert--warning">
+              <div className="alert__body">
+                {t('accounts.memberUnresolved', { name: unresolved })}
+              </div>
+            </div>
+          )}
           <ul className="list">
             {(members.data?.entries ?? []).map((trustee: Trustee) => (
               <li key={trustee.sid} className="list__item list__item--static">
@@ -160,14 +201,44 @@ function GroupSheet({ name }: { name: string }) {
                       certainly true. */}
                   <span className="list__meta mono">{trustee.sid}</span>
                 </span>
+                {/* Removal is by SID, which is what the row is really made of.
+                    A member whose name would not resolve can still be taken
+                    out — and that is the one most likely to need it. */}
+                {trustee.sid && (
+                  <button
+                    type="button"
+                    className="link link--danger"
+                    disabled={membership.isPending}
+                    onClick={() =>
+                      membership.mutate({ add: [], remove: [trustee.sid as string] })
+                    }
+                  >
+                    {t('accounts.removeMember')}
+                  </button>
+                )}
               </li>
             ))}
           </ul>
-          {/* Editable through api.setGroupMembers, which nothing calls yet.
-              Said here rather than left as a menu entry that does nothing. */}
-          <p className="muted small">{t('accounts.membersReadOnly')}</p>
         </section>
       </div>
+
+      <footer className="sheet-window__footer">
+        <button
+          type="button"
+          className="button"
+          disabled={membership.isPending}
+          onClick={() => setAdding(true)}
+        >
+          {membership.isPending ? t('status.loading') : `+ ${t('accounts.addMember')}`}
+        </button>
+      </footer>
+
+      {adding && (
+        <TrusteePicker
+          onClose={() => setAdding(false)}
+          onPick={add}
+        />
+      )}
     </div>
   )
 }

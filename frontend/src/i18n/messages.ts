@@ -539,8 +539,10 @@ export const de = {
   'accounts.memberCount': '{count} Mitglieder',
   'accounts.members': 'Mitglieder',
   'accounts.noMembers': 'Diese Gruppe hat keine Mitglieder.',
-  'accounts.membersReadOnly':
-    'Die Mitgliedschaft wird hier gezeigt und noch nicht bearbeitet.',
+  'accounts.addMember': 'Mitglied hinzufügen',
+  'accounts.removeMember': 'Entfernen',
+  'accounts.memberUnresolved':
+    'Diesem Server ist „{name}" kein Konto. Mitgliedschaft wird über die Sicherheitskennung geschrieben, und die gibt es dafür nicht.',
   'accounts.created': 'Das Konto {name} wurde angelegt.',
   'accounts.deleted': 'Das Konto {name} wurde gelöscht.',
   'accounts.enabled': 'Das Konto {name} ist jetzt aktiv.',
@@ -1432,7 +1434,10 @@ export const en: Record<MessageKey, string> = {
   'accounts.memberCount': '{count} members',
   'accounts.members': 'Members',
   'accounts.noMembers': 'This group has no members.',
-  'accounts.membersReadOnly': 'Membership is shown here and not yet edited.',
+  'accounts.addMember': 'Add member',
+  'accounts.removeMember': 'Remove',
+  'accounts.memberUnresolved':
+    'This server does not know “{name}” as an account. Membership is written by SID, and there is none for it.',
   'accounts.created': 'The account {name} was created.',
   'accounts.deleted': 'The account {name} was deleted.',
   'accounts.enabled': 'The account {name} is now enabled.',

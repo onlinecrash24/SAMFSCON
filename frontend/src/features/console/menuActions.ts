@@ -8,10 +8,16 @@
  *
  * Two rules run through all of it.
  *
- * **Nothing is offered that no endpoint can perform.** A session cannot be
- * disconnected and an account cannot be unlocked, because there is no call for
- * either — `locked_out` is reported and nothing acts on it. A greyed-out entry
- * would be a promise for later; an absent one is the truth today.
+ * **Nothing is offered that no endpoint can perform.** An account cannot be
+ * unlocked, because there is no call for it anywhere — `locked_out` is
+ * reported and nothing acts on it. A greyed-out entry would be a promise for
+ * later; an absent one is the truth today.
+ *
+ * Disconnecting a session is absent for a different reason, and the two were
+ * wrongly given the same one here. `srvsvc` does implement `NetSessDel`; there
+ * is simply no SAMFSCON endpoint in front of it yet. "We have not built it" and
+ * "it cannot be built" are different sentences, and writing the second when the
+ * first is true is how a limitation outlives the thing that caused it.
  *
  * **What a row cannot do, it does not show.** A share defined in the server's
  * text smb.conf is readable and not changeable, so it keeps Properties and
@@ -161,8 +167,9 @@ export function localGroupMenu(_group: LocalGroup): MenuNode[] {
   return tidy([
     { id: 'refresh', labelKey: 'action.refresh' },
     SEPARATOR,
-    // Membership is readable and not yet editable — api.setGroupMembers exists
-    // and nothing calls it. Properties shows who is in it.
+    // Members are added and removed in the property sheet, where the list of
+    // them is. A menu entry would open the same window one click sooner and
+    // put the action a long way from the thing it acts on.
     { id: 'group.properties', labelKey: 'action.properties' },
   ])
 }
