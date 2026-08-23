@@ -18,24 +18,33 @@ import { useI18n } from '../../i18n'
 import { PermissionEditor } from '../permissions/PermissionEditor'
 
 const GROUPS = ['basic', 'permissions', 'filePermissions', 'access', 'files', 'vfs', 'advanced'] as const
-type Group = (typeof GROUPS)[number]
+/** Exported so a caller can ask for a particular tab. */
+export type ShareGroup = (typeof GROUPS)[number]
 
 export function ShareDetail({
   name,
   canWrite,
+  initialGroup,
   onChanged,
-  onDeleted,
-  deleting,
+  onDelete,
 }: {
   name: string
   canWrite: boolean
+  /** Which tab to open on. "Permissions…" on the menu means this one. */
+  initialGroup?: ShareGroup
   onChanged: (message: string) => void
-  onDeleted: () => void
-  deleting: boolean
+  /**
+   * Asks to be deleted — not "has been deleted".
+   *
+   * The confirmation and the mutation belong to whoever is hosting this sheet,
+   * because the pane and the window need different things afterwards: the pane
+   * clears its selection, the window closes itself.
+   */
+  onDelete: () => void
 }) {
   const { t, language } = useI18n()
   const queryClient = useQueryClient()
-  const [group, setGroup] = useState<Group>('basic')
+  const [group, setGroup] = useState<ShareGroup>(initialGroup ?? 'basic')
 
   const share = useQuery<Share>({ queryKey: ['share', name], queryFn: () => api.share(name) })
   const catalogue = useQuery({
@@ -207,8 +216,8 @@ export function ShareDetail({
         <button
           type="button"
           className="button button--danger"
-          disabled={!editable || deleting}
-          onClick={onDeleted}
+          disabled={!editable}
+          onClick={onDelete}
         >
           {t('share.delete')}
         </button>

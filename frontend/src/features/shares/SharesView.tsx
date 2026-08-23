@@ -14,36 +14,39 @@
  *    that saves without effect.
  */
 
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 
 import { api } from '../../api/endpoints'
 import type { CapabilityNote, Share, ShareListing } from '../../api/types'
 import type { MessageKey } from '../../i18n/messages'
+import { anchorOf } from '../../components/ContextMenu'
 import { Badge, Banner, ErrorMessage, Icon, Spinner } from '../../components/primitives'
 import { useI18n } from '../../i18n'
 import { NewShareDialog } from './NewShareDialog'
-import { ShareDetail } from './ShareDetail'
 
-export function SharesView({ onChanged }: { onChanged: (message: string) => void }) {
+export function SharesView({
+  selected,
+  onSelect,
+  onOpen,
+  onContext,
+  creating,
+  onCreate,
+  onCreated,
+}: {
+  selected: string | null
+  onSelect: (name: string) => void
+  /** Double-click, or Properties: opens a window. */
+  onOpen: (name: string) => void
+  onContext: (share: Share, at: { x: number; y: number }) => void
+  creating: boolean
+  onCreate: () => void
+  onCreated: (name: string, served: boolean) => void
+}) {
   const { t } = useI18n()
-  const queryClient = useQueryClient()
-
-  const [selected, setSelected] = useState<string | null>(null)
-  const [creating, setCreating] = useState(false)
 
   const shares = useQuery<ShareListing>({
     queryKey: ['shares'],
     queryFn: () => api.shares(),
-  })
-
-  const remove = useMutation({
-    mutationFn: (name: string) => api.deleteShare(name),
-    onSuccess: (_result, name) => {
-      setSelected(null)
-      void queryClient.invalidateQueries({ queryKey: ['shares'] })
-      onChanged(t('share.deleted', { name }))
-    },
   })
 
   const capabilities = shares.data?.capabilities
@@ -68,7 +71,7 @@ export function SharesView({ onChanged }: { onChanged: (message: string) => void
             className="button"
             disabled={!canWrite}
             title={canWrite ? undefined : t('share.cannotWrite')}
-            onClick={() => setCreating(true)}
+            onClick={onCreate}
           >
             + {t('share.new')}
           </button>
@@ -97,57 +100,24 @@ export function SharesView({ onChanged }: { onChanged: (message: string) => void
 
       {shares.isLoading && <Spinner label={t('status.loading')} />}
       <ErrorMessage error={shares.error} />
-      <ErrorMessage error={remove.error} onDismiss={() => remove.reset()} />
 
-      <div className="shares__split">
-        <ul className="list list--shares">
-          {(shares.data?.entries ?? []).map((share) => (
-            <ShareRow
-              key={share.name}
-              share={share}
-              selected={share.name === selected}
-              onSelect={() => setSelected(share.name)}
-            />
-          ))}
-          {shares.data?.entries.length === 0 && (
-            <li className="list__empty muted">{t('status.empty')}</li>
-          )}
-        </ul>
+      <ul className="list list--shares">
+        {(shares.data?.entries ?? []).map((share) => (
+          <ShareRow
+            key={share.name}
+            share={share}
+            selected={share.name === selected}
+            onSelect={() => onSelect(share.name)}
+            onOpen={() => onOpen(share.name)}
+            onContext={(at) => onContext(share, at)}
+          />
+        ))}
+        {shares.data?.entries.length === 0 && (
+          <li className="list__empty muted">{t('status.empty')}</li>
+        )}
+      </ul>
 
-        <div className="shares__detail">
-          {selected ? (
-            <ShareDetail
-              name={selected}
-              canWrite={canWrite}
-              onChanged={onChanged}
-              onDeleted={() => remove.mutate(selected)}
-              deleting={remove.isPending}
-            />
-          ) : (
-            <div className="placeholder">
-              <Icon type="share" className="icon--large" />
-              <p className="muted">{t('share.selectOne')}</p>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {creating && (
-        <NewShareDialog
-          onClose={() => setCreating(false)}
-          onDone={(name, served) => {
-            setCreating(false)
-            setSelected(name)
-            void queryClient.invalidateQueries({ queryKey: ['shares'] })
-            // Written either way. Whether the server has re-read its
-            // configuration is a different fact, and worth saying rather than
-            // leaving somebody to wonder where their share went.
-            onChanged(
-              served ? t('share.created', { name }) : t('share.createdNotServed', { name }),
-            )
-          }}
-        />
-      )}
+      {creating && <NewShareDialog onClose={onCreate} onDone={onCreated} />}
     </div>
   )
 }
@@ -172,10 +142,14 @@ function ShareRow({
   share,
   selected,
   onSelect,
+  onOpen,
+  onContext,
 }: {
   share: Share
   selected: boolean
   onSelect: () => void
+  onOpen: () => void
+  onContext: (at: { x: number; y: number }) => void
 }) {
   const { t } = useI18n()
 
@@ -185,6 +159,23 @@ function ShareRow({
         type="button"
         className={selected ? 'list__item list__item--selected' : 'list__item'}
         onClick={onSelect}
+        onDoubleClick={onOpen}
+        // Selects first, then opens the menu — which is what Windows does, and
+        // it matters: a menu acting on a row that is not the highlighted one is
+        // how the wrong share gets deleted.
+        onContextMenu={(event) => {
+          event.preventDefault()
+          onSelect()
+          onContext({ x: event.clientX, y: event.clientY })
+        }}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter') onOpen()
+          else if (event.shiftKey && event.key === 'F10') {
+            event.preventDefault()
+            onSelect()
+            onContext(anchorOf(event.currentTarget))
+          }
+        }}
       >
         <Icon type="share" />
         {/* Two lines. The column is 300px wide on a normal window, and a name,

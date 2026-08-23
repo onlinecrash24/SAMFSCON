@@ -18,7 +18,22 @@ import { useI18n } from '../../i18n'
 import { NewAccountDialog } from './NewAccountDialog'
 import { PasswordDialog } from './PasswordDialog'
 
-export function AccountsView({ onChanged }: { onChanged: (message: string) => void }) {
+export function AccountsView({
+  section,
+  onChanged,
+  onOpen,
+  onContext,
+}: {
+  /** Which half of the console the tree is pointing at. */
+  section: 'users' | 'groups'
+  onChanged: (message: string) => void
+  onOpen: (of: 'user' | 'group', name: string) => void
+  onContext: (
+    of: 'user' | 'group',
+    row: LocalAccount | LocalGroup,
+    at: { x: number; y: number },
+  ) => void
+}) {
   const { t } = useI18n()
   const queryClient = useQueryClient()
 
@@ -71,6 +86,7 @@ export function AccountsView({ onChanged }: { onChanged: (message: string) => vo
       <ErrorMessage error={toggle.error} onDismiss={() => toggle.reset()} />
       <ErrorMessage error={remove.error} onDismiss={() => remove.reset()} />
 
+      {section === 'users' && (
       <section className="detail__section">
         <h3>{t('accounts.users')}</h3>
         {users.isLoading && <Spinner label={t('status.loading')} />}
@@ -85,7 +101,14 @@ export function AccountsView({ onChanged }: { onChanged: (message: string) => vo
           </thead>
           <tbody>
             {(users.data?.entries ?? []).map((account) => (
-              <tr key={account.rid}>
+              <tr
+                key={account.rid}
+                onDoubleClick={() => onOpen('user', account.name)}
+                onContextMenu={(event) => {
+                  event.preventDefault()
+                  onContext('user', account, { x: event.clientX, y: event.clientY })
+                }}
+              >
                 <td>
                   <Icon type="user" /> {account.name}
                 </td>
@@ -142,14 +165,26 @@ export function AccountsView({ onChanged }: { onChanged: (message: string) => vo
         </table>
       </section>
 
+      )}
+
+      {section === 'groups' && (
       <section className="detail__section">
         <h3>{t('accounts.groups')}</h3>
         {groups.isLoading && <Spinner label={t('status.loading')} />}
         <ul className="list">
           {(groups.data?.entries ?? []).map((group: LocalGroup) => (
             <li key={group.rid}>
-              <div className="list__item list__item--static">
-                <Icon type="alias" />
+              <button
+                type="button"
+                className="list__item"
+                onDoubleClick={() => onOpen('group', group.name)}
+                onClick={() => onOpen('group', group.name)}
+                onContextMenu={(event) => {
+                  event.preventDefault()
+                  onContext('group', group, { x: event.clientX, y: event.clientY })
+                }}
+              >
+                <Icon type="group" />
                 <span className="list__name">{group.name}</span>
                 {group.description && (
                   <span className="list__meta muted small">{group.description}</span>
@@ -157,7 +192,7 @@ export function AccountsView({ onChanged }: { onChanged: (message: string) => vo
                 <Badge tone="muted">
                   {t('accounts.memberCount', { count: group.members.length })}
                 </Badge>
-              </div>
+              </button>
             </li>
           ))}
           {groups.data?.entries.length === 0 && (
@@ -165,6 +200,7 @@ export function AccountsView({ onChanged }: { onChanged: (message: string) => vo
           )}
         </ul>
       </section>
+      )}
 
       {creating && (
         <NewAccountDialog

@@ -1,31 +1,64 @@
 /**
- * The navigation tree.
+ * The navigation pane, which now belongs to whichever console is open.
  *
- * Flatter than SAMADCON's, and for a reason that is not laziness: a directory
- * is a tree and a file server is not. What a file server has is a handful of
- * lists — shares, sessions, accounts — so the tree is a list of snap-ins, with
- * children only where there genuinely are any.
+ * It used to hold the list of consoles — six buttons that never change, in the
+ * column a tree is supposed to occupy. The consoles are a strip across the top
+ * now, and this pane shows what the open console actually navigates.
  *
- * Snap-ins that are not built yet stay in the list, greyed out with a note. An
- * administrator coming from the Windows Computer Management console looks for
- * "Shared Folders" here; finding it disabled with an explanation is far less
- * confusing than finding nothing.
+ * Which is not much, for most of them: a file server is a handful of lists, and
+ * a list has nothing above it to draw a tree of. Those consoles declare
+ * `panes.tree: false` and the shell never renders this at all. What is left is
+ * the two that do have a hierarchy — local accounts, which divide into users
+ * and groups, and the folder tree inside a share, which is not built yet.
+ *
+ * The server heading stays regardless. It is the one place that says which
+ * machine is being changed, and on a screen with six consoles and several open
+ * windows that is worth a permanent line rather than a memory.
  */
 
-import { SNAPINS, type SnapinId } from '../features/console/snapins'
-import { useI18n } from '../i18n'
 import type { ServerSummary } from '../api/types'
+import type { SnapinId } from '../features/console/snapins'
+import { useI18n } from '../i18n'
+import type { MessageKey } from '../i18n/messages'
 import { Icon } from './primitives'
 
-interface TreePaneProps {
-  server: ServerSummary
-  active: SnapinId
-  onSelect: (id: SnapinId) => void
+/** A branch of whatever the open console navigates. */
+export interface TreeBranch {
+  id: string
+  label: MessageKey
+  icon: string
 }
 
-export function TreePane({ server, active, onSelect }: TreePaneProps) {
+const BRANCHES: Partial<Record<SnapinId, TreeBranch[]>> = {
+  accounts: [
+    { id: 'users', label: 'accounts.users', icon: 'user' },
+    { id: 'groups', label: 'accounts.groups', icon: 'group' },
+  ],
+}
+
+/** What a console shows in the pane, or nothing. */
+export function branchesFor(snapin: SnapinId): TreeBranch[] {
+  return BRANCHES[snapin] ?? []
+}
+
+/** The branch a console opens on. */
+export function firstBranch(snapin: SnapinId): string | null {
+  return branchesFor(snapin)[0]?.id ?? null
+}
+
+export function TreePane({
+  server,
+  snapin,
+  selected,
+  onSelect,
+}: {
+  server: ServerSummary
+  snapin: SnapinId
+  selected: string | null
+  onSelect: (id: string) => void
+}) {
   const { t } = useI18n()
-  const standalone = server.mode === 'standalone'
+  const branches = branchesFor(snapin)
 
   return (
     <nav className="tree" aria-label={t('nav.server')}>
@@ -40,41 +73,26 @@ export function TreePane({ server, active, onSelect }: TreePaneProps) {
       </div>
 
       <ul className="tree__list">
-        {SNAPINS.map((snapin) => {
-          // Two different reasons an entry can be inactive, and they are not
-          // the same thing: "not built yet" is a gap, "not applicable to this
-          // server" is an answer. Both disable the row; only the first will
-          // ever change.
-          const notApplicable = snapin.standaloneOnly === true && !standalone
-          const disabled = !snapin.available || notApplicable
-
-          return (
-            <li key={snapin.id}>
-              <button
-                type="button"
-                className={
-                  active === snapin.id ? 'tree__item tree__item--active' : 'tree__item'
-                }
-                aria-current={active === snapin.id ? 'page' : undefined}
-                aria-disabled={disabled || undefined}
-                onClick={() => onSelect(snapin.id)}
-                title={
-                  notApplicable
-                    ? t('snapin.accounts.domainMember', {
-                        domain: server.realm ?? server.workgroup ?? '',
-                      })
-                    : !snapin.available
-                      ? t('snapin.unavailable')
-                      : undefined
-                }
-              >
-                <Icon type={snapin.icon} />
-                <span>{t(snapin.label)}</span>
-                {disabled && <span className="tree__badge">·</span>}
-              </button>
-            </li>
-          )
-        })}
+        {branches.map((branch) => (
+          <li key={branch.id}>
+            <button
+              type="button"
+              className={
+                selected === branch.id ? 'tree__item tree__item--active' : 'tree__item'
+              }
+              aria-current={selected === branch.id ? 'page' : undefined}
+              onClick={() => onSelect(branch.id)}
+            >
+              <Icon type={branch.icon} />
+              <span>{t(branch.label)}</span>
+            </button>
+          </li>
+        ))}
+        {branches.length === 0 && (
+          // Reached only by a console that declares a tree and has nothing to
+          // put in it yet — the folder tree, which arrives with its console.
+          <li className="tree__empty muted small">{t('tree.nothing')}</li>
+        )}
       </ul>
     </nav>
   )

@@ -87,7 +87,6 @@ h3 { font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.04em; colo
 .mono { font-family: var(--mono); font-size: 0.85em; }
 .muted { color: var(--text-muted); }
 .small { font-size: 0.85em; }
-.selectable { user-select: all; }
 
 /* --------------------------------------------------------------------- */
 /* Controls                                                              */
@@ -151,7 +150,6 @@ button:focus-visible {
 
 .checkbox { display: flex; align-items: center; gap: 8px; margin: 6px 0; cursor: pointer; }
 .checkbox input { width: auto; }
-.checkbox--inline { margin: 0; font-size: 0.9em; }
 
 /* Brand -------------------------------------------------------------- */
 
@@ -164,20 +162,6 @@ button:focus-visible {
   height: auto;
 }
 .logo-mark { display: block; flex: 0 0 auto; }
-
-/* Visible to screen readers, not on screen. */
-.visually-hidden {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  margin: -1px;
-  padding: 0;
-  overflow: hidden;
-  clip: rect(0 0 0 0);
-  clip-path: inset(50%);
-  white-space: nowrap;
-  border: 0;
-}
 
 .icon { width: 16px; height: 16px; fill: currentColor; flex: 0 0 auto; }
 .icon--large { width: 28px; height: 28px; color: var(--accent); }
@@ -263,13 +247,7 @@ button:focus-visible {
   border: 1px solid var(--border);
   border-radius: 10px;
 }
-.login__brand { margin-bottom: 22px; }
-.login__heading { margin-top: 16px; }
-.login__realm { color: var(--text-muted); font-size: 0.88em; margin-top: 0; }
 .login__card .button--primary { width: 100%; margin-top: 8px; padding: 9px; }
-
-.login__server { display: flex; gap: 8px; }
-.login__server input { flex: 1; }
 .login__probe {
   margin: 10px 0;
   padding: 10px 12px;
@@ -279,13 +257,7 @@ button:focus-visible {
   font-size: 0.9em;
 }
 .login__probe .row__label { flex: 0 0 45%; }
-.login__insecure {
-  margin: 2px 0 10px;
-  color: var(--warning);
-  font-size: 0.85em;
-}
 .login__footer { display: flex; justify-content: space-between; margin-top: 16px; font-size: 0.85em; }
-.login__version { color: var(--text-muted); }
 
 /* --------------------------------------------------------------------- */
 /* Console shell                                                         */
@@ -304,29 +276,58 @@ button:focus-visible {
 .topbar__brand { display: flex; align-items: center; gap: 8px; }
 .topbar__brand strong { letter-spacing: 0.08em; }
 .topbar__brand span { color: var(--text-muted); font-size: 0.85em; }
-.topbar__search { flex: 1; max-width: 380px; }
 .topbar__actions { display: flex; align-items: center; gap: 12px; margin-left: auto; }
 .topbar__user { color: var(--text-muted); font-size: 0.9em; }
 
+/* The panes, in the four shapes the consoles between them need.
+ *
+ * `grid-template-columns` is deliberately NOT in this base rule. It lives only
+ * in the four modifiers below, all at one class of specificity (0,1,0) — the
+ * same as the media queries — so which of them wins is decided by source order
+ * alone, and the media queries come last. A modifier written as a second class
+ * on the same element would be (0,2,0) and would quietly outrank both of them,
+ * which is how a narrow layout stops applying without anybody noticing.
+ *
+ * Names in this block are the *shell's*. Anything else wanting a pair of panes
+ * needs its own prefix: a second `.console__panes` further down this file once
+ * turned this grid into a different one, and every pane wrapped onto its own
+ * row. */
 .console__panes {
   display: grid;
-  /* Two columns: the navigation and the working area. SAMADCON had three,
-     because its detail pane belongs to the shell. SAMFSCON's detail panes
-     belong to the views — a share's tabs, an account's dialog — so a third
-     shell column here was an empty strip down the right of every screen.
-
-     Names in this block are the *shell's*. Anything else that wants a pair of
-     panes needs its own prefix: a second `.console__panes` further down the
-     file silently turned this grid into a different one, and the panes wrapped
-     onto rows under each other. */
-  grid-template-columns: minmax(210px, 280px) 1fr;
   flex: 1;
   min-height: 0;
 }
 
+/* The 5px tracks hold the splitters. One hairline between two panes rather
+   than each pane drawing its own border, which is why .pane has none. */
+.console__panes--full {
+  grid-template-columns:
+    var(--tree-w, minmax(210px, 280px)) 5px minmax(340px, 1fr)
+    5px var(--detail-w, minmax(420px, 640px));
+}
+.console__panes--tree {
+  grid-template-columns: var(--tree-w, minmax(210px, 280px)) 5px 1fr;
+}
+/* A list and what is selected in it, with nothing above them to draw a tree
+   of. This is the share console, and SAMADCON has no equivalent. */
+.console__panes--detail {
+  grid-template-columns: minmax(340px, 1fr) 5px var(--detail-w, minmax(420px, 640px));
+}
+.console__panes--list { grid-template-columns: 1fr; }
+
+/* A console with no tree still renders the pane: unmounting it would throw
+   away every expanded branch. Hiding is what keeps it out of the grid. */
+.console__panes--detail .pane--tree,
+.console__panes--detail .splitter--tree,
+.console__panes--tree .pane--detail,
+.console__panes--tree .splitter--detail,
+.console__panes--list .pane--tree,
+.console__panes--list .pane--detail,
+.console__panes--list .splitter { display: none; }
+
 .pane { overflow: auto; min-height: 0; background: var(--surface); }
-.pane--tree { border-right: 1px solid var(--border); background: var(--surface-alt); }
-.pane--detail { border-left: 1px solid var(--border); background: var(--surface-alt); }
+.pane--tree { background: var(--surface-alt); }
+.pane--detail { background: var(--surface-alt); }
 .pane__header {
   display: flex;
   flex-wrap: wrap;
@@ -342,12 +343,25 @@ button:focus-visible {
 }
 .pane__actions { display: flex; gap: 6px; flex-wrap: wrap; }
 
+/* Narrow: the detail pane wraps to a full-width row under the other two, and
+   its splitter goes with it — a boundary that can no longer be dragged
+   sideways is a five-pixel strip that does nothing. */
 @media (max-width: 1100px) {
-  .console__panes { grid-template-columns: 200px 1fr; }
+  .console__panes--full { grid-template-columns: 200px 5px 1fr; }
+  .console__panes--full .pane--detail { grid-column: 1 / -1; border-top: 1px solid var(--border); }
+  .console__panes--full .splitter--detail { display: none; }
+  .console__panes--detail { grid-template-columns: 1fr; }
+  .console__panes--detail .pane--detail { grid-column: 1 / -1; border-top: 1px solid var(--border); }
+  .console__panes--detail .splitter { display: none; }
+  .console__panes--tree { grid-template-columns: 200px 5px 1fr; }
 }
+/* One column, and the tree with it: the console strip is the navigation on a
+   phone. Everything here has to outrank the shape rules above, which is what
+   the single-class discipline in this section buys. */
 @media (max-width: 720px) {
   .console__panes { grid-template-columns: 1fr; }
   .pane--tree { display: none; }
+  .splitter { display: none; }
 }
 
 /* --------------------------------------------------------------------- */
@@ -355,9 +369,6 @@ button:focus-visible {
 /* --------------------------------------------------------------------- */
 
 .tree { padding: 6px 0; }
-.tree__snapin + .tree__snapin { margin-top: 2px; }
-.tree__label--root { font-weight: 600; }
-.tree__label--muted { color: var(--text-muted); }
 /* An expander that is only a marker, not a control. */
 
 .placeholder {
@@ -373,33 +384,6 @@ button:focus-visible {
 .placeholder h2 { margin: 0; }
 .placeholder p { max-width: 46ch; margin: 0; }
 
-.tree__row { display: flex; align-items: center; gap: 2px; padding: 1px 4px; }
-.tree__row:hover { background: var(--hover); }
-.tree__row--selected { background: var(--selected); }
-.tree__toggle {
-  background: none;
-  border: none;
-  padding: 2px;
-  color: var(--text-muted);
-  cursor: pointer;
-  display: flex;
-}
-.tree__label {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex: 1;
-  padding: 3px 4px;
-  background: none;
-  border: none;
-  color: inherit;
-  font: inherit;
-  cursor: pointer;
-  text-align: left;
-  overflow: hidden;
-}
-.tree__label span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-
 /* --------------------------------------------------------------------- */
 /* Object list                                                           */
 /* --------------------------------------------------------------------- */
@@ -409,35 +393,15 @@ button:focus-visible {
 .list__filter { max-width: 260px; }
 .list__count { color: var(--text-muted); font-size: 0.85em; }
 .list__empty { padding: 20px 12px; color: var(--text-muted); }
-
-.list__table { width: 100%; border-collapse: collapse; }
-.list__table th {
-  text-align: left;
-  padding: 6px 12px;
-  font-size: 0.78em;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--text-muted);
-  border-bottom: 1px solid var(--border);
-  font-weight: 600;
-}
-.list__row { cursor: pointer; }
-.list__row td { padding: 5px 12px; border-bottom: 1px solid color-mix(in srgb, var(--border) 55%, transparent); }
-.list__row:hover { background: var(--hover); }
-.list__row--selected { background: var(--selected); }
 .list__name { display: flex; align-items: center; gap: 8px; }
-.list__description { color: var(--text-muted); max-width: 40ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* --------------------------------------------------------------------- */
 /* Detail pane                                                           */
 /* --------------------------------------------------------------------- */
 
 .detail { padding: 14px; }
-.detail--empty { color: var(--text-muted); }
 .detail__header { display: flex; gap: 12px; align-items: center; margin-bottom: 12px; }
 .detail__header h2 { margin: 0; word-break: break-word; }
-.detail__type { margin: 0; color: var(--text-muted); font-size: 0.85em; }
-.detail__actions { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
 .detail__section { margin-bottom: 18px; }
 
 /* Tabs ---------------------------------------------------------------- */
@@ -475,32 +439,10 @@ button:focus-visible {
 /* Property sheet ------------------------------------------------------- */
 
 .sheet textarea { resize: vertical; min-height: 2.4em; }
-.sheet__actions {
-  position: sticky;
-  bottom: 0;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 10px 0;
-  margin-top: 6px;
-  background: var(--surface-alt);
-  border-top: 1px solid var(--border);
-}
-.sheet__buttons { display: flex; gap: 8px; }
 
 .row { display: flex; gap: 10px; padding: 3px 0; font-size: 0.92em; }
 .row__label { flex: 0 0 42%; color: var(--text-muted); }
 .row__value { flex: 1; word-break: break-word; }
-
-/* Attribute editor ----------------------------------------------------- */
-
-.attrs { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 0.88em; }
-.attrs td { padding: 4px 6px; border-bottom: 1px solid color-mix(in srgb, var(--border) 55%, transparent); vertical-align: top; }
-.attrs__name { width: 38%; color: var(--text-muted); word-break: break-word; }
-.attrs__value { word-break: break-word; }
-.attrs__item { padding: 1px 0; }
-.attrs__action { width: 5.5em; text-align: right; white-space: nowrap; }
 
 /* Permissions ---------------------------------------------------------- */
 
@@ -510,26 +452,9 @@ button:focus-visible {
   border-bottom: 1px solid color-mix(in srgb, var(--border) 55%, transparent);
   vertical-align: top;
 }
-.acl__rights { word-break: break-word; }
-
-.picker__chosen { display: flex; align-items: center; gap: 8px; }
-.picker__results {
-  list-style: none;
-  margin: 6px 0 0;
-  padding: 0;
-  max-height: 220px;
-  overflow: auto;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-}
-.picker__results li { padding: 4px 8px; }
-.picker__results li:hover { background: var(--hover); }
 
 .flags { margin: 0; padding-left: 18px; }
 .flags li { padding: 2px 0; }
-
-.linklist { list-style: none; margin: 8px 0 0; padding: 0; }
-.linklist li { display: flex; align-items: center; gap: 6px; padding: 3px 0; }
 
 /* --------------------------------------------------------------------- */
 /* Modal                                                                 */
@@ -575,8 +500,6 @@ button:focus-visible {
 .modal__body { padding: 16px; overflow: auto; }
 
 .modal__footer { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--border); }
-
-.form__grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 12px; }
 @media (max-width: 480px) {
   .form__grid { grid-template-columns: 1fr; }
 }
@@ -584,7 +507,6 @@ button:focus-visible {
 /* Cards, tables and fact lists ----------------------------------------- */
 
 .stack { display: flex; flex-direction: column; gap: 14px; padding: 0 12px 16px; }
-.stack-tight { display: flex; flex-direction: column; gap: 2px; }
 
 /* A separator that follows the theme. The browser default draws a bevelled
    grey line that reads as a rendering fault against a dark surface. */
@@ -613,11 +535,8 @@ button:focus-visible {
   .facts dd { margin-bottom: 8px; }
 }
 
-/* Wide tables scroll inside their own box rather than pushing the pane. */
-.table-wrap { overflow-x: auto; }
 /* A table sitting straight in a pane needs the padding the pane's other
    children bring with them; one inside a card already has it. */
-.pane > .table-wrap { padding: 0 12px 16px; }
 .table {
   width: 100%;
   border-collapse: collapse;
@@ -637,101 +556,18 @@ button:focus-visible {
   white-space: nowrap;
 }
 .table tbody tr:hover { background: var(--hover); }
-.table__actions { white-space: nowrap; text-align: right; }
-.table__actions .link { margin-left: 10px; }
 
 .link--danger { color: var(--danger); }
-
-.checklist {
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-  max-height: 180px;
-  overflow-y: auto;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 6px 10px;
-}
-
-.field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 0 12px; }
 @media (max-width: 480px) {
   .field-row { grid-template-columns: 1fr; }
 }
 
-.pane__footnote { padding: 0 12px 12px; }
-
-/* Group policy ---------------------------------------------------------- */
-
-.badge-row { display: flex; gap: 4px; flex-wrap: wrap; }
-
-.plain-list { list-style: none; margin: 6px 0 0; padding: 0; }
-.plain-list li { padding: 2px 0; }
-
-/* A field with a button beside it — rename, and anything else where the
-   input alone is not the whole action. */
-.field-inline { display: flex; gap: 6px; align-items: center; }
-.field-inline input { flex: 1; min-width: 0; }
-
-.table tbody tr.table__row--selected { background: var(--selected); }
-
-/* A long list of settings: tighter rows, and the two trailing columns kept to
-   their content so the name gets the rest. */
-.table--compact th,
-.table--compact td { padding: 3px 10px 3px 0; vertical-align: middle; }
-.table--compact tbody tr:hover { background: var(--hover); }
-.table__cell--narrow { width: 1%; white-space: nowrap; }
-/* A column holding an input. Wide enough for a select's longest label and a
-   unit beside a number; the name column keeps whatever is left. */
-.table__cell--value { width: 16rem; }
-.table__cell--value input[type='number'] { width: 6rem; }
-.table__cell--value select { width: 100%; }
 
 /* Name/value pairs spread over many small tables — the settings report is a
    stack of one table per section. Each would otherwise size its columns to its
    own contents, so the values land at a different place in every section. A
    fixed first column puts them all in one line down the page. */
-/* The folder column of the redirection tab. Not --narrow: that sizes to the
-   name and breaks the GUID underneath it across three lines. Wide enough for
-   the GUID on one line, and the target path keeps the rest. */
-.table__cell--folder { width: 21rem; }
 
-/* A column holding a select. Not --narrow: that sizes to the header, and a
-   dropdown squeezed to the width of the word "Aktion" shows one letter of its
-   own value. */
-.table__cell--action { width: 11rem; }
-
-/* An account name in a table of file properties. Not --narrow either: sized to
-   the header, "root" came out as "roo" with the caret hiding the rest. */
-.table__cell--account { width: 8rem; }
-
-/* An octal file mode with its symbolic reading. The two belong side by side —
-   stacked, the reading wrapped after four characters and read as damage. */
-.table__cell--mode { width: 11rem; }
-.table__cell--mode .mode { display: flex; align-items: baseline; gap: 8px; }
-.table__cell--mode input { width: 4.5rem; }
-
-/* The model's half of the security report. Framed and tinted so that where
-   the established part ends is visible without reading a word of it — the
-   one thing a reader must never have to work out. */
-.assistant {
-  margin-top: 14px;
-  padding: 10px 12px;
-  border: 1px dashed var(--border);
-  border-radius: var(--radius);
-  background: var(--surface-alt);
-}
-.assistant__label {
-  margin: 0 0 8px;
-  font-size: 0.82em;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--text-muted);
-}
-.assistant h4 { margin: 12px 0 4px; font-size: 0.95em; }
-/* A reply that ignored the schema. Its own line breaks are all the
-   structure there is, so they are kept; interpreting its markdown would
-   mean this half deciding what the model meant. */
-.assistant__text { white-space: pre-wrap; overflow-wrap: anywhere; }
 
 /* The prompt, shown before it is sent. Scrolls rather than stretching the
    page, and wraps rather than cutting a line off at the edge. */
@@ -746,95 +582,12 @@ button:focus-visible {
   overflow-wrap: anywhere;
 }
 
-.table--pairs { table-layout: fixed; }
-.table--pairs td { overflow-wrap: anywhere; }
-.table--pairs td:first-child { width: 22rem; }
-.table__cell--type { width: 7rem; }
-
 /* Administrative templates ---------------------------------------------- */
 
-/* The two-pane arrangement of the Windows policy editor: categories on the
-   left, the settings of the selected one on the right. Each pane scrolls on
-   its own — the window itself never does, which is what keeps the tree in
-   place while a long list of settings moves. */
-.gpedit { display: flex; flex-direction: column; gap: 10px; flex: 1; min-height: 0; }
-.gpedit__bar {
-  display: flex;
-  gap: 12px;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-}
-.gpedit__bar .tabs { margin-bottom: 0; }
-.gpedit__bar-right { display: flex; align-items: center; gap: 14px; }
-
-.gpedit__panes {
-  display: grid;
-  grid-template-columns: minmax(190px, 280px) minmax(0, 1fr);
-  flex: 1;
-  min-height: 0;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  overflow: hidden;
-}
-.gpedit__tree {
-  overflow: auto;
-  padding: 6px 0;
-  background: var(--surface-alt);
-  border-right: 1px solid var(--border);
-}
-.gpedit__list { overflow: auto; padding: 8px 10px; }
-
-@media (max-width: 720px) {
-  .gpedit__panes { grid-template-columns: 1fr; grid-template-rows: auto minmax(0, 1fr); }
-  .gpedit__tree { max-height: 12rem; border-right: none; border-bottom: 1px solid var(--border); }
-}
-
-/* One category. Full width and left-aligned so a long name reads as a line of
-   text rather than as a button. */
-.cats { list-style: none; margin: 0; padding: 0; }
-.cats__node {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  width: 100%;
-  padding: 4px 8px;
-  text-align: left;
-  background: none;
-  border: none;
-  color: inherit;
-  font: inherit;
-  cursor: pointer;
-}
-.cats__node:hover { background: var(--hover); }
-.cats__node--active { background: var(--selected); font-weight: 600; }
-/* A heading over a run of categories — the two halves of a policy, where the
-   same type appears once under each and the name alone would be ambiguous. */
-.cats__group {
-  padding: 10px 8px 3px;
-  font-size: 0.82em;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--text-muted);
-}
-.cats__twisty { flex: 0 0 auto; width: 0.8em; color: var(--text-muted); }
-.cats__name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-
-/* Configured states carry colour; "not configured" is the overwhelming
-   majority and stays muted, so the eye finds the other two. */
-.state { font-weight: 600; }
-.state--on { color: var(--success); }
-.state--off { color: var(--warning); }
-
-.explain { margin: 4px 0; }
-.explain summary { cursor: pointer; color: var(--text-muted); font-size: 0.9em; }
-.explain p { margin: 6px 0 0; white-space: pre-line; }
 
 /* A disabled fieldset greys its inputs; say why rather than leaving it to
    be guessed at. */
 fieldset[disabled] { opacity: 0.6; }
-
 
 /* --------------------------------------------------------------------- */
 /* The console strip, and what this build is                             */
@@ -878,6 +631,7 @@ fieldset[disabled] { opacity: 0.6; }
   color: var(--accent);
   border-bottom-color: var(--accent);
   font-weight: 500;
+}
 
 /* --------------------------------------------------------------------- */
 /* The line between two panes                                            */
@@ -1219,25 +973,18 @@ body.is-resizing { cursor: col-resize; user-select: none; }
 .list--shares .list__name { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .list--shares .list__meta { display: block; }
 
-/* Shares: a list beside the share that is open -------------------------- */
+/* The views inside a pane ------------------------------------------------
+ *
+ * The shares view used to carry its own two-column grid, because the shell had
+ * only two panes and the third had to be invented somewhere. The shell has
+ * three now, and one grid for the whole console is the point of them — a view
+ * that builds a second one inside a pane is how the two disagree about what a
+ * splitter is moving. */
 
 .shares,
 .sessions,
 .accounts { display: flex; flex-direction: column; min-height: 0; flex: 1; }
-
-.shares__split {
-  display: grid;
-  grid-template-columns: minmax(240px, 340px) 1fr;
-  flex: 1;
-  min-height: 0;
-}
-.shares__split > .list--shares { overflow: auto; border-right: 1px solid var(--border); }
-.shares__detail { overflow: auto; background: var(--surface-alt); }
-
-@media (max-width: 900px) {
-  .shares__split { grid-template-columns: 1fr; }
-  .shares__split > .list--shares { border-right: none; border-bottom: 1px solid var(--border); }
-}
+.list--shares { overflow: auto; flex: 1; min-height: 0; }
 
 /* Sessions and accounts are plain stacked tables, so they need the padding
    the panes' other children bring with them. */

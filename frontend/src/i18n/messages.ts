@@ -105,6 +105,10 @@ export const de = {
   'action.save': 'Speichern',
   'action.close': 'Schließen',
   'action.retry': 'Erneut versuchen',
+  'action.refresh': 'Aktualisieren',
+  'action.properties': 'Eigenschaften',
+  'action.delete': 'Löschen',
+  'action.openFolder': 'Ordner öffnen',
   'action.dismiss': 'Ausblenden',
 
   'status.loading': 'Wird geladen …',
@@ -139,6 +143,11 @@ export const de = {
   'share.create': 'Anlegen',
   'share.delete': 'Freigabe löschen',
   'share.created': 'Die Freigabe {name} wurde angelegt.',
+  'share.deleteConfirm': 'Freigabe löschen',
+  'share.deleteWarning':
+    'Die Freigabe {name} wird nicht mehr veröffentlicht, und ihre Konfiguration wird entfernt.',
+  'share.deleteKeepsFiles':
+    'Das Verzeichnis und alles darin bleibt liegen — diese Konsole löscht keine Dateien:',
   'share.deleted': 'Die Freigabe {name} wurde gelöscht.',
   'share.selectOne': 'Eine Freigabe auswählen.',
   'share.name': 'Name',
@@ -228,6 +237,7 @@ export const de = {
   'sessions.access.write': 'schreiben',
   'sessions.access.create': 'anlegen',
   'sessions.close': 'Schließen',
+  'sessions.showFiles': 'Offene Dateien anzeigen',
   'sessions.closeConfirm': 'Datei schließen',
   'sessions.closeWarning':
     '{path} wird für {user} zwangsweise geschlossen. Nicht gespeicherte Änderungen gehen dabei verloren, und der Client wird nicht gefragt.',
@@ -304,6 +314,7 @@ export const de = {
   'share.group.permissions': 'Freigaberechte',
   'share.group.filePermissions': 'Dateirechte',
   'nav.consoles': 'Konsolen',
+  'tree.nothing': 'Hier ist noch nichts.',
   'nav.actions': 'Aktionen',
   'app.sourceTitle': 'Quelltext und Lizenz dieser Fassung',
   'menu.empty': 'Hier ist nichts zu tun.',
@@ -353,6 +364,10 @@ export const de = {
   'accounts.setPasswordFor': 'Passwort für {name} setzen',
   'accounts.protected': 'Dieses Konto gehört dem Server selbst.',
   'accounts.memberCount': '{count} Mitglieder',
+  'accounts.members': 'Mitglieder',
+  'accounts.noMembers': 'Diese Gruppe hat keine Mitglieder.',
+  'accounts.membersReadOnly':
+    'Die Mitgliedschaft wird hier gezeigt und noch nicht bearbeitet.',
   'accounts.created': 'Das Konto {name} wurde angelegt.',
   'accounts.deleted': 'Das Konto {name} wurde gelöscht.',
   'accounts.enabled': 'Das Konto {name} ist jetzt aktiv.',
@@ -602,6 +617,10 @@ export const en: Record<MessageKey, string> = {
   'action.save': 'Save',
   'action.close': 'Close',
   'action.retry': 'Try again',
+  'action.refresh': 'Refresh',
+  'action.properties': 'Properties',
+  'action.delete': 'Delete',
+  'action.openFolder': 'Open the folder',
   'action.dismiss': 'Dismiss',
 
   'status.loading': 'Loading …',
@@ -635,6 +654,11 @@ export const en: Record<MessageKey, string> = {
   'share.create': 'Create',
   'share.delete': 'Delete share',
   'share.created': 'The share {name} was created.',
+  'share.deleteConfirm': 'Delete the share',
+  'share.deleteWarning':
+    'The share {name} stops being published and its configuration is removed.',
+  'share.deleteKeepsFiles':
+    'The directory and everything in it stays where it is — this console deletes no files:',
   'share.deleted': 'The share {name} was deleted.',
   'share.selectOne': 'Select a share.',
   'share.name': 'Name',
@@ -722,6 +746,7 @@ export const en: Record<MessageKey, string> = {
   'sessions.access.write': 'write',
   'sessions.access.create': 'create',
   'sessions.close': 'Close',
+  'sessions.showFiles': 'Show open files',
   'sessions.closeConfirm': 'Close the file',
   'sessions.closeWarning':
     '{path} will be force-closed for {user}. Unsaved changes are lost, and the client is not asked.',
@@ -797,6 +822,7 @@ export const en: Record<MessageKey, string> = {
   'share.group.permissions': 'Share permissions',
   'share.group.filePermissions': 'File permissions',
   'nav.consoles': 'Consoles',
+  'tree.nothing': 'Nothing here yet.',
   'nav.actions': 'Actions',
   'app.sourceTitle': 'Source and licence of this build',
   'menu.empty': 'Nothing can be done here.',
@@ -845,6 +871,9 @@ export const en: Record<MessageKey, string> = {
   'accounts.setPasswordFor': 'Set the password for {name}',
   'accounts.protected': 'This account belongs to the server itself.',
   'accounts.memberCount': '{count} members',
+  'accounts.members': 'Members',
+  'accounts.noMembers': 'This group has no members.',
+  'accounts.membersReadOnly': 'Membership is shown here and not yet edited.',
   'accounts.created': 'The account {name} was created.',
   'accounts.deleted': 'The account {name} was deleted.',
   'accounts.enabled': 'The account {name} is now enabled.',

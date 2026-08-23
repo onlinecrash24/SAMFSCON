@@ -25,6 +25,7 @@ import { useI18n } from '../i18n'
 import { forgetServer, listRecentServers, type RecentServer } from '../state/recentServers'
 import { useSession } from '../state/session'
 import { LogoLockup } from './Logo'
+import { SourceNote } from './SourceNote'
 import { Badge, Banner, ErrorMessage, Field, Spinner } from './primitives'
 
 /** Value of the server selector. Anything else is a profile id. */
@@ -347,8 +348,14 @@ export function LoginView() {
 
         {info && (
           <p className="login__footer muted small">
-            SAMFSCON {info.version} · {info.smb.min_protocol}
+            {info.smb.min_protocol}
             {info.smb.encrypt ? ` · ${t('session.encrypted')}` : ''}
+            {' · '}
+            {/* The licence and the source, before anybody signs in. AGPL §13
+                obliges a modified version offered over a network to offer its
+                source to the people using it — which includes the people
+                standing at the door. */}
+            <SourceNote version={info.version} />
           </p>
         )}
       </form>

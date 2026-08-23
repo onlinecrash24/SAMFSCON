@@ -20,7 +20,18 @@ import type { OpenFile, ServerSession } from '../../api/types'
 import { Badge, ErrorMessage, Icon, Modal, Spinner } from '../../components/primitives'
 import { useI18n } from '../../i18n'
 
-export function SessionsView({ onChanged }: { onChanged: (message: string) => void }) {
+export function SessionsView({
+  onChanged,
+  onContext,
+}: {
+  onChanged: (message: string) => void
+  /** Two tables, so the row says which of them it came from. */
+  onContext: (
+    kind: 'session' | 'file',
+    row: ServerSession | OpenFile,
+    at: { x: number; y: number },
+  ) => void
+}) {
   const { t, tn } = useI18n()
   const queryClient = useQueryClient()
   const [filter, setFilter] = useState('')
@@ -94,7 +105,11 @@ export function SessionsView({ onChanged }: { onChanged: (message: string) => vo
           </thead>
           <tbody>
             {(sessions.data?.entries ?? []).map((entry, index) => (
-              <SessionRow key={`${entry.client}-${entry.user}-${index}`} session={entry} />
+              <SessionRow
+                key={`${entry.client}-${entry.user}-${index}`}
+                session={entry}
+                onContext={(at) => onContext('session', entry, at)}
+              />
             ))}
             {sessions.data?.entries.length === 0 && (
               <tr>
@@ -125,7 +140,13 @@ export function SessionsView({ onChanged }: { onChanged: (message: string) => vo
           </thead>
           <tbody>
             {shown.map((file) => (
-              <tr key={file.id ?? file.path}>
+              <tr
+                key={file.id ?? file.path}
+                onContextMenu={(event) => {
+                  event.preventDefault()
+                  onContext('file', file, { x: event.clientX, y: event.clientY })
+                }}
+              >
                 <td className="mono">{file.path ?? '—'}</td>
                 <td>{file.user ?? '—'}</td>
                 <td>
@@ -192,10 +213,21 @@ export function SessionsView({ onChanged }: { onChanged: (message: string) => vo
   )
 }
 
-function SessionRow({ session }: { session: ServerSession }) {
+function SessionRow({
+  session,
+  onContext,
+}: {
+  session: ServerSession
+  onContext: (at: { x: number; y: number }) => void
+}) {
   const { t } = useI18n()
   return (
-    <tr>
+    <tr
+      onContextMenu={(event) => {
+        event.preventDefault()
+        onContext({ x: event.clientX, y: event.clientY })
+      }}
+    >
       <td>
         <Icon type="user" /> {session.user ?? '—'}
         {session.guest && <Badge tone="warn">{t('sessions.guest')}</Badge>}
