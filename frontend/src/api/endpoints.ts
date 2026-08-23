@@ -9,6 +9,7 @@
 
 import { http, param } from './client'
 import type {
+  FindingReport,
   AccountCreate,
   AccountUpdate,
   AppInfo,
@@ -167,6 +168,10 @@ export const api = {
     http.get<EffectiveAccess>(
       `/permissions/effective?share=${param(share)}&sid=${param(sid)}&path=${param(path)}`,
     ),
+
+  // -- what stands out on this server ---------------------------------------
+
+  serverFindings: () => http.get<FindingReport>('/diagnostics/findings'),
 
   // -- browsing a share ----------------------------------------------------
 

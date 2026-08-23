@@ -1015,9 +1015,23 @@ body.is-resizing { cursor: col-resize; user-select: none; }
  * splitter is moving. */
 
 .shares,
+.diagnostics,
 .files,
 .sessions,
 .accounts { display: flex; flex-direction: column; min-height: 0; flex: 1; }
+
+/* Findings: a stack of cards, each carrying its own evidence. The scroll is
+   the shared .table-scroll, so a long report behaves like a long table and the
+   header above it stays put. */
+.diagnostics .card { margin-bottom: 12px; }
+.diagnostics .card h3 { margin: 8px 0 4px; font-size: 1em; }
+.diagnostics .card p { margin: 0 0 6px; }
+.diagnostics .alert { margin-bottom: 12px; }
+/* Removed with the dead SAMADCON families and wanted again here: a list that
+   is a list to a screen reader and a stack of lines to everybody else. */
+.plain-list { list-style: none; margin: 6px 0 0; padding: 0; }
+.plain-list li { padding: 2px 0; }
+.findings__label { font-family: var(--font); }
 
 /* The listing scrolls, the header above it does not. A table that carries the
    pane's whole scroll takes its own header row out of view on the way down. */

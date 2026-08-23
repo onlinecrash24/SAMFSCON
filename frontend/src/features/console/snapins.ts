@@ -100,7 +100,7 @@ export const SNAPINS: Snapin[] = [
     id: 'diagnostics',
     label: 'snapin.diagnostics',
     icon: 'diagnostics',
-    available: false,
+    available: true,
     note: 'snapin.diagnostics.note',
     // A list of findings, full width.
     panes: { tree: false, detail: false },

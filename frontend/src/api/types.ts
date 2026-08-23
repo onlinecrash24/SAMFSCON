@@ -450,6 +450,57 @@ export interface DirectoryListing {
 }
 
 // ---------------------------------------------------------------------------
+// Diagnostics
+// ---------------------------------------------------------------------------
+
+export type Severity = 'high' | 'medium' | 'low' | 'info'
+export type FindingArea = 'management' | 'transport' | 'shares' | 'sessions'
+
+export interface Finding {
+  id: string
+  severity: Severity
+  area: FindingArea
+  /** A share's name, a client. Empty for findings about the server itself. */
+  subject: string
+  /**
+   * What the rule looked at.
+   *
+   * Shown rather than hidden behind a disclosure: a finding saying "create
+   * mask is 0777, measured against world-write" can be argued with, and one
+   * saying "the permissions are weak" can only be believed.
+   */
+  evidence: Record<string, unknown>
+}
+
+export interface Unreadable {
+  area: FindingArea
+  subject: string
+  reason: string
+}
+
+export interface Coverage {
+  shares_total: number
+  shares_with_readable_configuration: number
+  shares_without_readable_configuration: number
+  shares_probed: number
+  shares_with_permissions_read: number
+  /** False throughout this version: nothing connects to a share. */
+  connectivity_examined: boolean
+  permissions_examined: boolean
+}
+
+export interface FindingReport {
+  generated_at: string
+  findings: Finding[]
+  /**
+   * What nobody could look at. Beside the findings and never inside them —
+   * "we did not look" is not a statement about the server.
+   */
+  unreadable: Unreadable[]
+  coverage: Coverage
+}
+
+// ---------------------------------------------------------------------------
 // Local users and groups — standalone servers only
 // ---------------------------------------------------------------------------
 

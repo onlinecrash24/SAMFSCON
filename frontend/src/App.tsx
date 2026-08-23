@@ -32,6 +32,7 @@ import {
   type ActionId,
 } from './features/console/menuActions'
 import { SNAPINS, panesFor, snapinById, type SnapinId } from './features/console/snapins'
+import { DiagnosticsView } from './features/diagnostics/DiagnosticsView'
 import { FilesView } from './features/files/FilesView'
 import { FolderWindow } from './features/files/FolderWindow'
 import { NewFolderDialog } from './features/files/NewFolderDialog'
@@ -347,6 +348,8 @@ function Console({ session }: { session: SessionInfo }) {
                 menu.open(at, fileMenu(entry), (id) => runAction(id as ActionId, entry))
               }
             />
+          ) : snapin === 'diagnostics' ? (
+            <DiagnosticsView />
           ) : snapin === 'accounts' && standalone ? (
             <AccountsView
               section={selected === 'groups' ? 'groups' : 'users'}

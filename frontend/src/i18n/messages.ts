@@ -365,6 +365,121 @@ export const de = {
     'Der neue Ordner erbt die Rechte des übergeordneten, wie jedes über SMB angelegte Verzeichnis. Ändern lassen sie sich danach in seinen Eigenschaften.',
   'files.nameForbidden': 'Diese Zeichen sind in einem Namen nicht erlaubt: \ / : * ? " < > |',
   'share.root': 'Wurzel von {name}',
+  'snapin.diagnostics.heading': 'Was an diesem Server auffällt',
+  'findings.none': 'Nichts von dem, wonach diese Konsole sieht, ist aufgefallen.',
+  'findings.severity.high': 'hoch',
+  'findings.severity.medium': 'mittel',
+  'findings.severity.low': 'gering',
+  'findings.severity.info': 'Hinweis',
+  'findings.area.management': 'Verwaltung',
+  'findings.area.transport': 'Verbindung',
+  'findings.area.shares': 'Freigaben',
+  'findings.area.sessions': 'Sitzungen',
+  'findings.generatedAt': 'Gelesen am {when}',
+  'findings.evidence': 'Grundlage',
+  'findings.unreadableHeading': 'Nicht angesehen',
+  'findings.unreadableWhy':
+    'Zu diesen Punkten steht unten nichts — nicht, weil nichts gefunden wurde, sondern weil niemand nachsehen konnte.',
+  'findings.coverage': '{readable} von {total} Freigaben mit lesbarer Konfiguration.',
+  'findings.coverage.rest':
+    'Die übrigen {count} stehen in der Text-smb.conf, die diese Konsole nicht liest — zu ihren Optionen sagt dieser Bericht nichts.',
+  'findings.coverage.notProbed':
+    'Ob sich die Freigaben öffnen lassen und wie ihre Dateirechte zu den Freigaberechten stehen, wurde nicht geprüft. Das heißt nicht, dass dort nichts ist.',
+  'findings.unreadable.capabilities_unreadable': 'Was dieses Konto darf, war nicht zu ermitteln.',
+  'findings.unreadable.privilege_unconfirmed':
+    'Ob dieses Konto SeDiskOperatorPrivilege hält, war nicht zu bestätigen — verschachtelte Gruppenmitgliedschaft ist von hier nicht auflösbar.',
+  'findings.unreadable.registry_state_unknown':
+    'Der Zustand der Registry-Konfiguration war nicht zu ermitteln.',
+  'findings.unreadable.server_facts_unreadable': 'Die erweiterten Serverangaben wurden verweigert.',
+  'findings.unreadable.shares_unreadable': 'Die Freigabenliste war nicht lesbar.',
+  'findings.unreadable.registry_unreadable': 'Die Registry-Konfiguration war nicht lesbar.',
+  'findings.unreadable.configuration_not_in_registry':
+    'Diese Freigabe steht in der Text-smb.conf; ihre Optionen sind von hier nicht lesbar.',
+  'findings.unreadable.sessions_unreadable': 'Die Sitzungsliste war nicht lesbar.',
+  'findings.registry_config_absent':
+    'Der Server liest seine Registry-Konfiguration nicht',
+  'findings.registry_config_absent.why':
+    'Ohne `include = registry` in der [global]-Sektion der smb.conf ignoriert Samba alles unter HKLM\\\\Software\\\\Samba\\\\smbconf — und das ist der einzige Ort, den diese Konsole beschreiben kann. Freigaben lassen sich dann lesen, aber nicht anlegen oder ändern.',
+  'findings.registry_shares_not_served':
+    'In der Registry stehen Freigaben, die der Server nicht veröffentlicht',
+  'findings.registry_shares_not_served.why':
+    'Die Konfiguration ist da und wird nicht gelesen. Meist fehlt `registry shares = yes` in der [global]-Sektion; manchmal hat smbd die Registry nur noch nicht neu eingelesen — `smbcontrol all reload-config` entscheidet, welches von beidem es ist.',
+  'findings.disk_operator_unassigned':
+    'Niemand auf diesem Server hält SeDiskOperatorPrivilege',
+  'findings.disk_operator_unassigned.why':
+    'Das Recht steuert, wer Freigaben und Freigabeberechtigungen über das Netz ändern darf. Die Liste der Inhaber kam leer zurück — nicht „wir konnten nicht nachsehen“, sondern „es hält es niemand“. Solange das so ist, kann keine Anmeldung hier etwas an Freigaben ändern.',
+  'findings.disk_operator_broadly_granted':
+    'SeDiskOperatorPrivilege ist sehr breit vergeben',
+  'findings.disk_operator_broadly_granted.why':
+    'Unter den Inhabern ist eine Gruppe, die praktisch jeden angemeldeten Benutzer umfasst. Damit darf jeder, der sich anmelden kann, Freigaben anlegen, ändern und ihre Berechtigungen setzen. Die zugrunde gelegte Liste steht in den Belegen — wer sie für zu streng hält, kann ihr widersprechen.',
+  'findings.transport_peer_unverified':
+    'Die Identität des Servers ist nicht geprüft',
+  'findings.transport_peer_unverified.why':
+    'Kerberos beweist, mit wem gesprochen wird: ein Ticket für cifs/<host> kann nur dieser Host entschlüsseln. NTLM beweist nur den Client gegenüber dem Server, nicht umgekehrt. Auf einem eigenständigen Server ist das die einzige Möglichkeit und darum eher eine Eigenschaft der Umgebung als ein Fehler.',
+  'findings.transport_this_session':
+    'Diese Verbindung',
+  'findings.transport_this_session.why':
+    'Wie *diese* Sitzung geschützt ist — nicht, was der Server von anderen verlangt. Signierung erzwingt SAMFSCON clientseitig, und die Verschlüsselung ist eine Einstellung des Containers. Was der Server selbst fordert, steht hier nicht.',
+  'findings.share_guest_ok':
+    'Diese Freigabe erlaubt Gastzugriff',
+  'findings.share_guest_ok.why':
+    '`guest ok = yes` lässt Zugriff ohne Anmeldung zu, abgebildet auf das Gastkonto. Ob dabei geschrieben werden darf, steht in dieser Freigabe nicht — es kann global gesetzt sein, und diese Datei liest die Konsole nicht.',
+  'findings.share_guest_writable':
+    'Diese Freigabe erlaubt Gästen zu schreiben',
+  'findings.share_guest_writable.why':
+    '`guest ok = yes` zusammen mit `read only = no`, beides in dieser Freigabe. Wer das Netz erreicht, kann ohne Anmeldung Dateien anlegen, ändern und löschen.',
+  'findings.share_wide_links':
+    'Diese Freigabe folgt Symlinks aus der Freigabe hinaus',
+  'findings.share_wide_links.why':
+    '`wide links = yes` erlaubt Symlinks, die aus dem Freigabeverzeichnis herausführen — ein Client kann damit Dateien erreichen, die nie freigegeben wurden. Samba schaltet das stillschweigend ab, solange `unix extensions = yes` gilt; diese Option ist global und darum von hier nicht lesbar. Erst beides zusammen entscheidet die Wirkung.',
+  'findings.share_create_mask_world_writable':
+    'Neue Dateien werden für alle beschreibbar angelegt',
+  'findings.share_create_mask_world_writable.why':
+    'Die Maske lässt das Schreibrecht für „andere“ stehen. Auf dem Dateisystem darf dann jeder lokale Benutzer schreiben, unabhängig davon, was die Freigabe- und Datei-ACLs sagen.',
+  'findings.share_force_user':
+    'Alle Zugriffe laufen unter einem festen Konto',
+  'findings.share_force_user.why':
+    '`force user` schreibt jeden Zugriff auf dieses Konto um. Datei-Berechtigungen unterscheiden danach nicht mehr, wer etwas getan hat — im Dateisystem sieht jede Änderung gleich aus.',
+  'findings.share_force_user_root':
+    'Alle Zugriffe laufen als root',
+  'findings.share_force_user_root.why':
+    '`force user = root` gibt jedem, der die Freigabe öffnen darf, die Rechte des Systemkontos auf allem darunter. Datei-ACLs greifen dann nicht mehr, und im Dateisystem ist nicht mehr erkennbar, wer etwas getan hat.',
+  'findings.share_hosts_allow_unparsable':
+    'In hosts allow oder hosts deny steht ein Eintrag, den Samba nicht deuten kann',
+  'findings.share_hosts_allow_unparsable.why':
+    'Ein Tippfehler in dieser Zeile fällt nicht auf: Samba verwirft den Eintrag stillschweigend, und die Zugriffsbeschränkung, die er darstellen sollte, existiert einfach nicht. Welche Formen erkannt wurden, steht in den Belegen.',
+  'findings.share_hosts_deny_without_allow':
+    'hosts deny sperrt alles, und hosts allow steht nicht daneben',
+  'findings.share_hosts_deny_without_allow.why':
+    'In dieser Freigabe steht keine Ausnahme. Wenn eine global gesetzt ist, ist alles in Ordnung — diese Datei liest die Konsole nicht, und deshalb steht das hier als Hinweis und nicht als Befund.',
+  'findings.share_hidden_name_browseable':
+    'Ein Name auf $ deutet auf versteckt, die Freigabe ist es aber nicht',
+  'findings.share_hidden_name_browseable.why':
+    'Namen mit $ am Ende werden üblicherweise nicht angezeigt. `browseable = yes` hebt das auf, sodass die Freigabe in der Netzwerkumgebung erscheint — was so vermutlich nicht gemeint war. Verstecken ist ohnehin keine Zugriffsbeschränkung.',
+  'findings.share_vfs_option_without_module':
+    'Optionen sind gesetzt, deren VFS-Modul nicht geladen ist',
+  'findings.share_vfs_option_without_module.why':
+    'Diese Einstellungen laufen nie: das Modul, das sie auswertet, steht nicht in `vfs objects` dieser Freigabe. Ein so konfigurierter Papierkorb sieht eingerichtet aus und fängt nichts auf.',
+  'findings.share_path_nested':
+    'Diese Freigabe liegt innerhalb einer anderen',
+  'findings.share_path_nested.why':
+    'Zwei Freigaben auf verschachtelten Pfaden haben eigene Berechtigungen auf denselben Dateien. Wer über die äußere hereinkommt, unterliegt den Regeln der inneren nicht — das ist der häufigste Weg, eine Beschränkung versehentlich zu umgehen.',
+  'findings.share_path_duplicate':
+    'Mehrere Freigaben zeigen auf dasselbe Verzeichnis',
+  'findings.share_path_duplicate.why':
+    'Jede bringt ihre eigenen Freigaberechte mit. Die großzügigste entscheidet, was möglich ist, und keine der Einstellungen sieht für sich genommen falsch aus.',
+  'findings.share_path_sensitive':
+    'Diese Freigabe veröffentlicht ein Systemverzeichnis',
+  'findings.share_path_sensitive.why':
+    'Der Pfad liegt in einem Bereich, der zum Betriebssystem gehört. Selbst lesend gibt das Konfiguration und Zugangsdaten heraus; schreibend ist es ein Weg, den Server zu übernehmen. Die zugrunde gelegte Liste steht in den Belegen.',
+  'findings.share_configured_not_served':
+    'Diese Freigabe ist konfiguriert und abgeschaltet',
+  'findings.share_configured_not_served.why':
+    'In der Registry steht `available = no`. Die Konfiguration ist vollständig, der Server veröffentlicht sie aber nicht — was gewollt sein kann und öfter ein Rest von etwas ist, das jemand einmal abgeschaltet hat.',
+  'findings.guest_session_present':
+    'Gerade ist eine Gastsitzung verbunden',
+  'findings.guest_session_present.why':
+    'Das ist keine Ableitung aus einer Datei, sondern eine Beobachtung: Gastzugriff funktioniert auf diesem Server, gleich was irgendwo konfiguriert ist.',
   'accounts.users': 'Benutzer',
   'accounts.groups': 'Gruppen',
   'accounts.new': 'Neues Konto',
@@ -896,6 +1011,122 @@ export const en: Record<MessageKey, string> = {
     'The new folder inherits the parent’s permissions, as any directory created over SMB does. They can be changed afterwards in its properties.',
   'files.nameForbidden': 'These characters are not allowed in a name: \ / : * ? " < > |',
   'share.root': 'Root of {name}',
+  'snapin.diagnostics.heading': 'What stands out on this server',
+  'findings.none': 'Nothing this console looks for stood out.',
+  'findings.severity.high': 'high',
+  'findings.severity.medium': 'medium',
+  'findings.severity.low': 'low',
+  'findings.severity.info': 'note',
+  'findings.area.management': 'Management',
+  'findings.area.transport': 'Connection',
+  'findings.area.shares': 'Shares',
+  'findings.area.sessions': 'Sessions',
+  'findings.generatedAt': 'Read at {when}',
+  'findings.evidence': 'Decided from',
+  'findings.unreadableHeading': 'Not looked at',
+  'findings.unreadableWhy':
+    'Nothing below speaks to these — not because nothing was found, but because nobody could look.',
+  'findings.coverage': '{readable} of {total} shares have readable configuration.',
+  'findings.coverage.rest':
+    'The other {count} are in the text smb.conf, which this console does not read — this report says nothing about their options.',
+  'findings.coverage.notProbed':
+    'Whether the shares can be opened, and how their file permissions stand against their share permissions, was not examined. That is not the same as there being nothing there.',
+  'findings.unreadable.capabilities_unreadable':
+    'What this account may do could not be determined.',
+  'findings.unreadable.privilege_unconfirmed':
+    'Whether this account holds SeDiskOperatorPrivilege could not be confirmed — nested group membership is not resolvable from here.',
+  'findings.unreadable.registry_state_unknown':
+    'The state of the registry configuration could not be determined.',
+  'findings.unreadable.server_facts_unreadable': 'The extended server details were refused.',
+  'findings.unreadable.shares_unreadable': 'The share list could not be read.',
+  'findings.unreadable.registry_unreadable': 'The registry configuration could not be read.',
+  'findings.unreadable.configuration_not_in_registry':
+    'This share is in the text smb.conf; its options are not readable from here.',
+  'findings.unreadable.sessions_unreadable': 'The session list could not be read.',
+  'findings.registry_config_absent':
+    'The server does not read its registry configuration',
+  'findings.registry_config_absent.why':
+    'Without `include = registry` in the [global] section of smb.conf, Samba ignores everything under HKLM\\\\Software\\\\Samba\\\\smbconf — which is the only place this console can write. Shares can then be read here and not created or changed.',
+  'findings.registry_shares_not_served':
+    'The registry holds shares the server does not publish',
+  'findings.registry_shares_not_served.why':
+    'The configuration is there and is not being read. Usually `registry shares = yes` is missing from the [global] section; sometimes smbd has simply not re-read the registry yet, and `smbcontrol all reload-config` decides which of the two it is.',
+  'findings.disk_operator_unassigned':
+    'Nobody on this server holds SeDiskOperatorPrivilege',
+  'findings.disk_operator_unassigned.why':
+    'The right governs who may change shares and share permissions over the network. The holder list came back empty — not “we could not look” but “nobody holds it”. Until somebody does, no sign-in here can change a share.',
+  'findings.disk_operator_broadly_granted':
+    'SeDiskOperatorPrivilege is granted very broadly',
+  'findings.disk_operator_broadly_granted.why':
+    'One of the holders is a group covering practically everyone who can sign in, so anyone able to authenticate may create shares, change them and set their permissions. The list this rests on is in the evidence: anybody who thinks it too strict can disagree with it.',
+  'findings.transport_peer_unverified':
+    'The server’s identity is not verified',
+  'findings.transport_peer_unverified.why':
+    'Kerberos proves who is being talked to: a ticket for cifs/<host> is decryptable only by that host. NTLM proves the client to the server and nothing the other way. On a standalone server it is the only thing on offer, which makes this a property of the deployment rather than a mistake.',
+  'findings.transport_this_session':
+    'This connection',
+  'findings.transport_this_session.why':
+    'How *this* session is protected — not what the server demands of anybody else. Signing is required by SAMFSCON at the client end and encryption is a container setting. What the server itself requires is not stated here.',
+  'findings.share_guest_ok':
+    'This share allows guest access',
+  'findings.share_guest_ok.why':
+    '`guest ok = yes` permits access without signing in, mapped to the guest account. Whether writing is allowed with it is not stated in this share — it can be set globally, and this console reads no file.',
+  'findings.share_guest_writable':
+    'Guests may write to this share',
+  'findings.share_guest_writable.why':
+    '`guest ok = yes` together with `read only = no`, both in this share. Anyone who can reach the network can create, change and delete files without signing in.',
+  'findings.share_wide_links':
+    'This share follows symlinks out of itself',
+  'findings.share_wide_links.why':
+    '`wide links = yes` permits symlinks leading outside the share directory, so a client can reach files that were never shared. Samba silently disables it while `unix extensions = yes` is in force, and that option is global and unreadable from here. Only the two together decide the effect.',
+  'findings.share_create_mask_world_writable':
+    'New files are created writable by everybody',
+  'findings.share_create_mask_world_writable.why':
+    'The mask leaves the write bit set for “others”. Every local user on the server may then write to them, whatever the share and file ACLs say.',
+  'findings.share_force_user':
+    'Every access runs as one fixed account',
+  'findings.share_force_user.why':
+    '`force user` rewrites every access to that account. File permissions no longer distinguish who did what — in the filesystem every change looks the same.',
+  'findings.share_force_user_root':
+    'Every access runs as root',
+  'findings.share_force_user_root.why':
+    '`force user = root` gives anyone who may open the share the system account’s rights over everything beneath it. File ACLs stop applying, and the filesystem no longer records who did what.',
+  'findings.share_hosts_allow_unparsable':
+    'hosts allow or hosts deny carries an entry Samba cannot read',
+  'findings.share_hosts_allow_unparsable.why':
+    'A typo in this line does not announce itself: Samba discards the entry silently, and the restriction it was meant to express simply does not exist. Which forms were recognised is in the evidence.',
+  'findings.share_hosts_deny_without_allow':
+    'hosts deny blocks everything and no hosts allow sits beside it',
+  'findings.share_hosts_deny_without_allow.why':
+    'There is no exception in this share. If one is set globally then all is well — this console reads no file, which is why this is a note rather than a finding.',
+  'findings.share_hidden_name_browseable':
+    'A name ending in $ suggests hidden, and this share is not',
+  'findings.share_hidden_name_browseable.why':
+    'Names ending in $ are conventionally not listed. `browseable = yes` overrides that, so the share appears in network browsing — which is probably not what was meant. Hiding was never access control anyway.',
+  'findings.share_vfs_option_without_module':
+    'Options are set whose VFS module is not loaded',
+  'findings.share_vfs_option_without_module.why':
+    'These settings never run: the module that reads them is not in this share’s `vfs objects`. A recycle bin configured this way looks set up and catches nothing.',
+  'findings.share_path_nested':
+    'This share sits inside another',
+  'findings.share_path_nested.why':
+    'Two shares on nested paths carry separate permissions over the same files. Somebody entering through the outer one is not subject to the inner one’s rules, which is the commonest way a restriction gets bypassed by accident.',
+  'findings.share_path_duplicate':
+    'Several shares point at one directory',
+  'findings.share_path_duplicate.why':
+    'Each brings its own share permissions. The most generous decides what is possible, and none of the settings looks wrong on its own.',
+  'findings.share_path_sensitive':
+    'This share publishes a system directory',
+  'findings.share_path_sensitive.why':
+    'The path is inside an area that belongs to the operating system. Read-only it hands out configuration and credentials; writable it is a route to owning the server. The list this rests on is in the evidence.',
+  'findings.share_configured_not_served':
+    'This share is configured and switched off',
+  'findings.share_configured_not_served.why':
+    'The registry carries `available = no`. The configuration is complete and the server does not publish it — which can be deliberate, and is more often a remnant of something somebody turned off once.',
+  'findings.guest_session_present':
+    'A guest session is connected right now',
+  'findings.guest_session_present.why':
+    'Not an inference from a file but an observation: guest access works on this server, whatever is configured anywhere.',
   'accounts.users': 'Users',
   'accounts.groups': 'Groups',
   'accounts.new': 'New account',
