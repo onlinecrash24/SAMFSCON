@@ -4,7 +4,16 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "samfscon"
-version = "0.1.0"
+# Not a literal. The version is stated in samfscon/__init__.py and read from
+# there, so the two cannot disagree — which is the only failure this arrangement
+# is for. SAMADCON shipped a release announcing itself as the previous one
+# because three files carried the number and the release commit raised two;
+# every installation then reported the wrong version at its sign-in screen, at
+# /api/v1/health and to the CLI, and it was a reader who noticed.
+#
+# setuptools *parses* the file for the attribute rather than importing it, which
+# is what keeps the samba bindings out of the build.
+dynamic = ["version"]
 description = "SAMFSCON — Samba FileServer Console: shares, permissions, sessions and local accounts over SMB and DCE/RPC"
 requires-python = ">=3.11"
 license = { text = "AGPL-3.0-or-later" }
@@ -32,6 +41,9 @@ dev = [
 
 [project.scripts]
 samfsconctl = "samfscon.cli:main"
+
+[tool.setuptools.dynamic]
+version = { attr = "samfscon.__version__" }
 
 [tool.setuptools.packages.find]
 include = ["samfscon*"]

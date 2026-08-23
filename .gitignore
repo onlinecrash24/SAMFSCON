@@ -43,3 +43,7 @@ htmlcov/
 *.swp
 .DS_Store
 Thumbs.db
+
+# setuptools builds in-tree: `pip install ./backend` leaves a second copy of
+# the whole source under backend/build. In SAMADCON one reached a commit.
+build/
