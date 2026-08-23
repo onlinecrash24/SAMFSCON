@@ -319,6 +319,29 @@ The calculation is honest about its limit: it counts the entries naming that acc
 token evaluation including every group it is in. A number that is *sometimes* the whole answer
 would be worse than one that says which it is.
 
+### Folders and files
+
+The tree lists the shares and, under each, the directories inside it — fetched a level at a time
+when a branch is opened, because a share can hold a hundred thousand of them and the console has no
+reason to know about any until somebody points at one. Files appear in the list beside the tree,
+not in it; a share where files outnumber folders fifty to one is the ordinary case.
+
+**Read-only, plus creating a directory.** That is a decision rather than a gap. This is a
+permissions console: what it needs from a share's contents is somewhere to point the ACL editor,
+and adding upload, download and delete would be a second product with a second set of ways to lose
+data. Creating a folder is the exception because it is what one does *while* setting permissions on
+a new project directory, and it is the one write to a server's file system these protocols can
+perform — precisely because it happens inside a share that already exists. It inherits its parent's
+permissions, as any directory created over SMB does, and the dialog says so.
+
+A directory the signed-in account may not read is listed as unreadable rather than as empty. The
+refusal is correct — the console runs as that account and can see no more than it can — and telling
+the two apart is usually the whole reason somebody opened this view.
+
+Each entry carries its read-only, hidden and system attributes, because each explains behaviour
+that gets blamed on the ACL: a read-only file refuses a write the permissions allow, a hidden one
+is missing from Explorer, and a system one is both.
+
 ### Sessions and open files
 
 `smbstatus` reads these from the server's tdb files; srvsvc publishes the same facts over the

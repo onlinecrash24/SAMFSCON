@@ -336,6 +336,33 @@ Die Rechnung ist ehrlich über ihre Grenze: gezählt werden die Einträge, die d
 nicht die vollständige Token-Auswertung samt aller Gruppen, in denen es ist. Eine Zahl, die
 *manchmal* die ganze Antwort ist, wäre schlechter als eine, die sagt, welche von beiden sie ist.
 
+### Ordner und Dateien
+
+Der Baum führt die Freigaben und darunter die Verzeichnisse, die in ihnen liegen — Ebene für Ebene
+geholt, wenn ein Zweig geöffnet wird, denn eine Freigabe kann hunderttausend davon enthalten, und
+die Konsole hat keinen Grund, eines davon zu kennen, bevor jemand darauf zeigt. Dateien stehen in
+der Liste daneben, nicht im Baum; eine Freigabe, in der Dateien die Ordner fünfzig zu eins
+übertreffen, ist der Normalfall.
+
+**Nur Lesen, plus das Anlegen eines Verzeichnisses.** Das ist eine Entscheidung, keine Lücke. Dies
+ist eine Rechte-Konsole: Was sie vom Inhalt einer Freigabe braucht, ist ein Ort, auf den der
+ACL-Editor zeigen kann. Hochladen, Herunterladen und Löschen dazuzunehmen wäre ein zweites Produkt
+mit einem zweiten Satz Möglichkeiten, Daten zu verlieren. Einen Ordner anzulegen ist die Ausnahme,
+weil man genau das tut, *während* man die Rechte eines neuen Projektverzeichnisses setzt — und weil
+es der eine Schreibzugriff auf das Dateisystem des Servers ist, den diese Protokolle leisten
+können, eben weil er innerhalb einer bereits bestehenden Freigabe stattfindet. Er erbt die Rechte
+des übergeordneten Verzeichnisses, wie jedes über SMB angelegte, und der Dialog sagt das.
+
+Ein Verzeichnis, das das angemeldete Konto nicht lesen darf, wird als nicht lesbar aufgeführt und
+nicht als leer. Die Ablehnung ist richtig — die Konsole läuft mit diesem Konto und sieht nicht mehr
+als es —, und die beiden auseinanderhalten zu können ist meist der ganze Grund, warum jemand diese
+Ansicht öffnet.
+
+Jeder Eintrag trägt seine Attribute schreibgeschützt, versteckt und System, denn jedes davon
+erklärt ein Verhalten, das sonst den Rechten angelastet wird: eine schreibgeschützte Datei
+verweigert einen Schreibzugriff, den die Rechte erlauben, eine versteckte fehlt im Explorer, und
+eine System-Datei ist beides.
+
 ### Sitzungen und offene Dateien
 
 `smbstatus` liest das aus den tdb-Dateien des Servers; srvsvc veröffentlicht dieselben Tatsachen
