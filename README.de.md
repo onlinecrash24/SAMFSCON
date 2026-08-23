@@ -161,9 +161,20 @@ services:
 
       SAMFSCON_LOG_LEVEL: "INFO"
 
+      # Welchen Zwischenstationen geglaubt wird, wenn sie sagen, wer der
+      # Aufrufer ist. Leer lassen, solange nichts davorsteht — dann führt das
+      # Audit-Log die Adresse, die tatsächlich verbunden hat. Nie 0.0.0.0/0.
+      SAMFSCON_TRUSTED_PROXIES: ""
+
     ports:
-      - "8444:8443"
-      - "8081:8080"
+      # Nur loopback, solange Sie nichts anderes sagen. Ohne Adresse
+      # veröffentlicht Docker auf jeder Schnittstelle des Hosts, und das hier
+      # ist ein Anmeldeformular, das Kerberos-Tickets ausstellt. Setzen Sie
+      # SAMFSCON_BIND auf die Adresse, auf der gelauscht werden soll —
+      # 0.0.0.0 heißt jede —, oder stellen Sie einen Reverse Proxy davor und
+      # tragen ihn oben ein.
+      - "${SAMFSCON_BIND:-127.0.0.1}:8444:8443"
+      - "${SAMFSCON_BIND:-127.0.0.1}:8081:8080"
 
     volumes:
       # Ein echtes Zertifikat kommt hier als server.crt und server.key hinein.

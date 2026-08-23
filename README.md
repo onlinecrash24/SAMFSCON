@@ -154,9 +154,19 @@ services:
 
       SAMFSCON_LOG_LEVEL: "INFO"
 
+      # Which hops in front of this container may be believed when they say who
+      # the caller is. Leave it empty when nothing is; then the audit log
+      # records the address that actually connected. Never 0.0.0.0/0.
+      SAMFSCON_TRUSTED_PROXIES: ""
+
     ports:
-      - "8444:8443"
-      - "8081:8080"
+      # Loopback unless you say otherwise. Without an address Docker publishes
+      # on every interface the host has, and this is a sign-in form that issues
+      # Kerberos tickets. Set SAMFSCON_BIND to the address it should listen on
+      # — 0.0.0.0 means every interface — or put a reverse proxy in front and
+      # name it above.
+      - "${SAMFSCON_BIND:-127.0.0.1}:8444:8443"
+      - "${SAMFSCON_BIND:-127.0.0.1}:8081:8080"
 
     volumes:
       # A real certificate goes here as server.crt and server.key. Without one

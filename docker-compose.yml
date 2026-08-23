@@ -127,9 +127,30 @@ services:
       # the network, and it applies to them too.
       TEST_SHARE_PATH: "${TEST_SHARE_PATH:-/srv/samfscon-test}"
 
+      # Which hops in front of this container may be believed when they say who
+      # the caller is. Comma- or space-separated addresses or CIDR ranges; the
+      # entrypoint turns them into nginx set_real_ip_from directives.
+      #
+      # Leave it empty when nothing is in front. X-Forwarded-For is an ordinary
+      # header that any client can send, so an unconfigured list means the
+      # audit log records the address that actually connected — which is right,
+      # and is what you want unless a proxy is genuinely there.
+      #
+      # Never 0.0.0.0/0. That trusts every caller to name themselves, which is
+      # the same as having no audit log.
+      SAMFSCON_TRUSTED_PROXIES: "${SAMFSCON_TRUSTED_PROXIES:-}"
+
     ports:
-      - "${SAMFSCON_HTTPS_PORT:-8444}:8443"
-      - "${SAMFSCON_HTTP_PORT:-8081}:8080"
+      # Bound to loopback unless a deployment says otherwise. Without an
+      # address Docker publishes on every interface the host has, and this is a
+      # sign-in form that issues Kerberos tickets and manages a file server —
+      # reachable from the whole network is a decision, not a default.
+      #
+      # To reach it from elsewhere, either put a reverse proxy in front (and
+      # set SAMFSCON_TRUSTED_PROXIES below) or set SAMFSCON_BIND to the address
+      # it should listen on. 0.0.0.0 works and means every interface.
+      - "${SAMFSCON_BIND:-127.0.0.1}:${SAMFSCON_HTTPS_PORT:-8444}:8443"
+      - "${SAMFSCON_BIND:-127.0.0.1}:${SAMFSCON_HTTP_PORT:-8081}:8080"
 
     # SAMFSCON talks to file servers over the network. For a domain member it
     # also needs to reach the realm's KDCs, and Kerberos needs the file
