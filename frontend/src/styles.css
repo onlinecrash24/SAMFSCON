@@ -1068,7 +1068,13 @@ body.is-resizing { cursor: col-resize; user-select: none; }
 .accounts > .detail__section { padding: 0 14px; }
 .sessions .table,
 .accounts .table { margin-top: 6px; }
-.sessions > .pane__header input[type='search'] { max-width: 320px; }
+/* Every input carries `width: 100%` from the base rule, which inside the flex
+   row of .pane__actions makes it claim the whole line — so the button beside
+   it wrapped onto its own row however much space there was. A flex-basis does
+   not fix it: the row's max-content is worked out from the input's *intrinsic*
+   width, so the container still came out too narrow for both. An explicit
+   width does, and max-width keeps it from overflowing a narrow pane. */
+.sessions > .pane__header input[type='search'] { width: 320px; max-width: 100%; }
 
 /* A row that is shown but not editable — an inherited permission entry.
    Dimmed rather than hidden: it is doing something, it just is not doing it

@@ -82,17 +82,15 @@ export function SessionsView({
       <div className="pane__header">
         <span className="muted small">{t('snapin.sessions.note')}</span>
         <div className="pane__actions">
-          <input
-            type="search"
-            value={filter}
-            placeholder={t('sessions.filter')}
-            onChange={(event) => setFilter(event.target.value)}
-          />
           {/* The two tables refetch on a timer, and a button is still worth
               having: after closing a handle somebody wants to see the answer
               now, not up to ten seconds from now. It says when the answer is
               from, because a list that refreshes itself and a list that has
-              stopped refreshing look identical. */}
+              stopped refreshing look identical.
+
+              Before the filter, because it acts on both tables while the
+              filter acts on one — and because it is the control people reach
+              for without reading. */}
           <button
             type="button"
             className="button"
@@ -104,6 +102,12 @@ export function SessionsView({
           >
             {sessions.isFetching || files.isFetching ? t('status.loading') : t('action.refresh')}
           </button>
+          <input
+            type="search"
+            value={filter}
+            placeholder={t('sessions.filter')}
+            onChange={(event) => setFilter(event.target.value)}
+          />
         </div>
       </div>
       <div className="pane__subhead">
