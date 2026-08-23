@@ -12,6 +12,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import { ApiError, setCsrfToken } from '../api/client'
 import { api } from '../api/endpoints'
 import type { LoginOptions, SessionInfo } from '../api/types'
+import { forgetConsoleLocation } from './consoleLocation'
 import { rememberServer } from './recentServers'
 
 interface SessionState {
@@ -55,6 +56,16 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     async (username: string, password: string, options: LoginOptions = {}) => {
       const info = await api.login(username, password, options)
       setCsrfToken(info.csrf_token)
+
+      // Before setSession, and the order matters: setSession mounts the
+      // console, which reads the remembered position in a lazy initialiser.
+      // Clearing it afterwards would clear it for the sign-in after this one.
+      //
+      // Cleared on the way *in* as well as on the way out, because an expired
+      // session never passes through sign-out — so without this the position
+      // outlives the session that chose it, and the next sign-in, possibly to
+      // a different server, opens wherever somebody was days ago.
+      forgetConsoleLocation()
       setSession(info)
 
       // Remember only what actually worked, and only when the user named a
@@ -78,6 +89,10 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     setCsrfToken(null)
     setSession(null)
     queryClient.clear()
+    // Leaving the previous person's share and account names in a shared
+    // browser is not what signing out means. expire() is the one path both
+    // logout and a lapsed session go through.
+    forgetConsoleLocation()
   }, [queryClient])
 
   const logout = useCallback(async () => {
