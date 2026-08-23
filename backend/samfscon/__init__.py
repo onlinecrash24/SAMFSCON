@@ -7,4 +7,4 @@ bindings. Nothing is installed on the server, and no file of its file system is
 touched directly.
 """
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"

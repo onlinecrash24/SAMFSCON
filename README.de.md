@@ -1,6 +1,6 @@
 <p align="center">
-  <img src="docs/brand/samfscon-banner-transparent.svg"
-       alt="SAMFSCON — die Samba-Fileserver-Konsole" width="560">
+  <img src="docs/brand/samfscon-lockup-dark.svg"
+       alt="SAMFSCON — die Samba-Fileserver-Konsole" width="420">
 </p>
 
 <p align="center"><em><a href="README.md">English version</a></em></p>
@@ -18,7 +18,9 @@ Sitzungen und offene Dateien, `samr` für lokale Konten, `lsarpc` für Namen und
 die registry-basierte Konfiguration. Der Container muss nicht auf dem Fileserver laufen, auf ihm
 wird nichts installiert, und keine Datei seines Dateisystems wird direkt angefasst.
 
-> Status: in Entwicklung. Was gebaut ist, steht unter [Meilensteine](#meilensteine).
+> Als **0.2.x** veröffentlicht: was unter [Meilensteine](#meilensteine) steht, ist gebaut,
+> und die Oberfläche ändert sich noch. Die Notizen zu jeder Fassung stehen im
+> [Changelog](CHANGELOG.md).
 
 ## Warum
 
@@ -362,4 +364,57 @@ Deutsch und Englisch durchgeklickt — auch mit gezogenem Netzwerkkabel, für di
 
 ## Lizenz
 
-AGPL-3.0-or-later, wie SAMADCON.
+AGPL-3.0-or-later, wie SAMADCON. Siehe [LICENSE](LICENSE).
+
+Die Konsole nennt ihre Lizenz und verlinkt dieses Repository — oben rechts,
+wenn Sie angemeldet sind, und im Fuß der Anmeldekarte. Das ist keine Zierde:
+Abschnitt 13 verpflichtet jeden, der SAMFSCON ändert und anderen über ein Netz
+anbietet, ihnen den Quelltext anzubieten. Eine Konsole, die nie sagt, was sie
+ist und woher sie kommt, macht dieses Versprechen unhaltbar — und seinen Bruch
+unbemerkbar. **Wenn Sie forken, richten Sie den Link auf Ihren Fork, statt ihn
+zu entfernen** — eine Zeichenkette, `SOURCE_URL` in
+`frontend/src/components/SourceNote.tsx`.
+
+Zwei Lizenzen reisen mit. Die Samba-Python-Bindings stehen unter
+GPL-3.0-or-later und werden benutzt, nicht weitergegeben — sie kommen aus den
+Paketen der Distribution. Die Phosphor-Icons stehen unter MIT und werden sehr
+wohl weitergegeben, als Pfaddaten ins Bündel kompiliert; ihr Lizenztext steht
+deshalb in [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md). Beide sind mit
+AGPLv3 verträglich.
+
+## Veröffentlichen
+
+Die Version steht an **einer** Stelle, `backend/samfscon/__init__.py`.
+`pyproject.toml` deklariert `dynamic = ["version"]` und liest das Attribut von
+dort, damit die beiden sich nicht widersprechen können. Alles, was jemandem eine
+Version nennt — `/api/v1/health`, `/api/v1/info`, die Anmeldekarte,
+`samfsconctl --version`, die OpenAPI-Beschreibung — liest sie durch dieses
+Modul.
+
+`frontend/package.json` muss auch eine tragen, weil npm das Feld verlangt.
+Zur Laufzeit liest sie niemand, und genau deshalb driftet sie ab. Also wird sie
+geprüft statt erinnert:
+
+```bash
+python scripts/check_versions.py
+```
+
+Der Lint-Lauf führt das bei jedem Push aus und vergleicht bei einem Tag-Build
+zusätzlich mit dem Tag. Das fängt, was keine Einzelquelle fangen kann: einen
+Tag, ohne dass irgendetwas angehoben wurde. Es gibt das, weil es SAMADCON
+passiert ist — v0.5.2 meldete sich als 0.5.1, und gefunden hat es ein Leser,
+nicht das Projekt.
+
+Die Release-Notiz steht im annotierten Tag, und [CHANGELOG.md](CHANGELOG.md)
+wird daraus erzeugt. Erst taggen, dann erzeugen, dann das Ergebnis committen:
+
+```bash
+git tag -a v0.2.0
+python scripts/build_changelog.py
+git commit -m "Read the changelog out of the tag" CHANGELOG.md
+```
+
+An `CHANGELOG.md` wird nichts von Hand geändert; der nächste Lauf überschreibt
+sie. Zwei Stellen mit demselben Text sind der Anfang davon, dass sie sich
+widersprechen — und ein Tag wird, anders als eine Datei, später nicht
+aufgeräumt.

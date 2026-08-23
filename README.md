@@ -1,6 +1,6 @@
 <p align="center">
-  <img src="docs/brand/samfscon-banner-transparent.svg"
-       alt="SAMFSCON — the Samba FileServer console" width="560">
+  <img src="docs/brand/samfscon-lockup-dark.svg"
+       alt="SAMFSCON — the Samba FileServer console" width="420">
 </p>
 
 <p align="center"><em><a href="README.de.md">Deutsche Fassung</a></em></p>
@@ -18,7 +18,9 @@ open files, `samr` for local accounts, `lsarpc` for names and SIDs, `winreg` for
 registry-backed configuration. The container does not have to run on the file server, nothing is
 installed on it, and no file of its file system is touched directly.
 
-> Status: under development. What is built is listed under [Milestones](#milestones).
+> Released as **0.2.x**: what is listed under [Milestones](#milestones) is built, and the
+> interface is still changing. Each release's notes are in the
+> [changelog](CHANGELOG.md).
 
 ## Why
 
@@ -347,4 +349,54 @@ through in both German and English — including with the network unplugged, for
 
 ## Licence
 
-AGPL-3.0-or-later, the same as SAMADCON.
+AGPL-3.0-or-later, the same as SAMADCON. See [LICENSE](LICENSE).
+
+The console names its licence and links to this repository — top right when
+signed in, and in the footer of the sign-in card. That is not decoration.
+Section 13 obliges anyone who modifies SAMFSCON and offers it to others over a
+network to offer them its source; a console that never says what it is or where
+it came from makes that promise impossible to keep and impossible to notice
+being broken. **If you fork it, point the link at your fork rather than removing
+it** — one string, `SOURCE_URL` in `frontend/src/components/SourceNote.tsx`.
+
+Two licences travel with it. The Samba python bindings are GPL-3.0-or-later and
+are used, not redistributed — they come from the distribution's own packages.
+The Phosphor icons are MIT and *are* redistributed, compiled into the bundle as
+path data, so their notice is reproduced in
+[THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md). Both are compatible with
+AGPLv3.
+
+## Releasing
+
+The version is written in **one** place, `backend/samfscon/__init__.py`.
+`pyproject.toml` declares `dynamic = ["version"]` and reads the attribute from
+there, so those two cannot disagree. Everything that names a version to anybody
+— `/api/v1/health`, `/api/v1/info`, the sign-in card, `samfsconctl --version`,
+the OpenAPI description — reads it through that module.
+
+`frontend/package.json` has to carry one too, because npm requires the field.
+Nothing reads it at runtime, which is exactly why it drifts, so it is checked
+rather than remembered:
+
+```bash
+python scripts/check_versions.py
+```
+
+The lint job runs it on every push, and on a tag build compares against the tag
+as well. That last part catches what no single-source arrangement can: a tag
+pushed without the version having been raised at all. It exists because it
+happened to SAMADCON — v0.5.2 shipped announcing itself as 0.5.1, and a reader
+found it rather than the project.
+
+The release note lives in the annotated tag, and [CHANGELOG.md](CHANGELOG.md) is
+generated from it. Tag first, then generate, then commit the result:
+
+```bash
+git tag -a v0.2.0
+python scripts/build_changelog.py
+git commit -m "Read the changelog out of the tag" CHANGELOG.md
+```
+
+Nothing is edited in `CHANGELOG.md` by hand; the next run overwrites it. Two
+places holding the same text is how they start to disagree — and a tag, unlike
+a file, does not get tidied later.
