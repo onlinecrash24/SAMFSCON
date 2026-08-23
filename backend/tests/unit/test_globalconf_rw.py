@@ -337,6 +337,87 @@ def test_clearing_the_list_is_never_a_lockout(server) -> None:
 
 
 # ---------------------------------------------------------------------------
+# hosts deny — the half the docstring used to promise and the code did not keep
+# ---------------------------------------------------------------------------
+
+BOTH = frozenset({"hosts allow", "hosts deny"})
+
+
+def test_a_deny_naming_this_console_is_refused_when_nothing_admits_it(server) -> None:
+    """With no allow list, the deny list is what decides — and it locks us out."""
+    with pytest.raises(InvalidRequest) as raised:
+        g.write(object(), {"hosts deny": "172.19.0.0/24"}, confirm=BOTH)
+
+    error = raised.value
+    assert error.code == "hosts_deny_includes_console"
+    assert error.context["address"] == "172.19.0.4"
+    assert server["written"] is None
+
+
+def test_a_deny_is_harmless_when_hosts_allow_covers_us(server) -> None:
+    """Samba admits a host named by both lists. Refusing this pair would make
+    the option unusable for the ordinary "deny the world, allow us" shape."""
+    g.write(
+        object(),
+        {"hosts allow": "172.19.0.0/24", "hosts deny": "172.19.0.0/24"},
+        confirm=BOTH,
+    )
+    assert server["written"]["hosts deny"] == "172.19.0.0/24"
+
+
+def test_the_stored_half_decides_for_the_half_not_sent(server) -> None:
+    """One save changes one list; the pair is judged as it will then stand."""
+    server["config"].stored = {"hosts allow": "172.19.0.0/24"}
+    g.write(object(), {"hosts deny": "172.19.0.0/24"}, confirm=BOTH)
+    assert server["written"] == {"hosts deny": "172.19.0.0/24"}
+
+
+def test_clearing_the_allow_list_exposes_the_stored_deny(server) -> None:
+    """The sharpest of these: nothing about the deny list changes, and the
+    change to the other one is what shuts the console out."""
+    server["config"].stored = {"hosts allow": "172.19.0.0/24", "hosts deny": "172.19.0.0/24"}
+
+    with pytest.raises(InvalidRequest) as raised:
+        g.write(object(), {"hosts allow": None}, confirm=BOTH)
+
+    assert raised.value.code == "hosts_deny_includes_console"
+    assert server["written"] is None
+
+
+def test_an_undecidable_deny_has_its_own_token(server) -> None:
+    """Confirming one list must not waive the check on the other."""
+    with pytest.raises(InvalidRequest) as raised:
+        g.write(
+            object(),
+            {"hosts deny": "fs1.example.lan"},
+            confirm=BOTH | {g.UNDECIDABLE_CONFIRM},
+        )
+
+    error = raised.value
+    assert error.code == "hosts_deny_undecidable"
+    assert error.context["confirm_with"] == g.UNDECIDABLE_CONFIRM_FOR["hosts deny"]
+
+    g.write(
+        object(),
+        {"hosts deny": "fs1.example.lan"},
+        confirm=BOTH | {g.UNDECIDABLE_CONFIRM_FOR["hosts deny"]},
+    )
+    assert server["written"] == {"hosts deny": "fs1.example.lan"}
+
+
+def test_a_change_touching_neither_list_is_not_judged_against_them(server) -> None:
+    """A stored deny that already names us must not block every other save.
+
+    It is the server's own configuration, arrived at by some other route, and
+    refusing to change the log level because of it would make the whole console
+    unusable on that server.
+    """
+    server["config"].stored = {"hosts deny": "172.19.0.0/24"}
+    g.write(object(), {"server string": "Dateiserver"})
+    assert server["written"] == {"server string": "Dateiserver"}
+
+
+# ---------------------------------------------------------------------------
 # The console's own floor
 # ---------------------------------------------------------------------------
 

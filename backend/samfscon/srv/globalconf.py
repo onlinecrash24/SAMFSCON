@@ -136,6 +136,14 @@ NOT_WRITABLE_PREFIXES: dict[str, str] = {
 # ordinary use of the option waived the check meant to catch a lockout.
 UNDECIDABLE_CONFIRM = "hosts allow:undecidable"
 
+# One per list. `hosts deny` can shut this console out on its own when there is
+# no `hosts allow` to admit it, and a single token would let confirming one
+# list waive the check on the other.
+UNDECIDABLE_CONFIRM_FOR = {
+    "hosts allow": UNDECIDABLE_CONFIRM,
+    "hosts deny": "hosts deny:undecidable",
+}
+
 # The dialects, oldest first. The order is what makes a floor-above-ceiling
 # comparison arithmetic rather than a table of special cases.
 DIALECTS = ("NT1", "SMB2_02", "SMB2_10", "SMB3_00", "SMB3_02", "SMB3_11")
@@ -1664,7 +1672,10 @@ def _check_hosts(
     could-not-determine as is-so.
 
     ``hosts deny`` is judged after ``hosts allow``, the way Samba applies them:
-    a deny covering our address is harmless when the allow also covers it.
+    a host named by both is admitted, so a deny covering our address is
+    harmless when the allow covers it too. Which is why the deny check runs
+    only when there is no allow list to save us — and why "covered" means the
+    opposite thing on each side.
 
     The undecidable case needs its own confirmation token, not the option's.
     Confirming ``hosts allow`` says "I know what this option does"; confirming
@@ -1673,36 +1684,98 @@ def _check_hosts(
     every ordinary use of the option silently waived the check that exists to
     catch the lockout.
     """
-    allow = checked.get("hosts allow")
-    if not isinstance(allow, str) or not allow.strip():
+    def effective(name: str) -> str:
+        # As the pair will stand after the change. A half that is not being
+        # sent still decides whether the half that is locks us out, and an
+        # explicit deletion is an empty list rather than the stored one.
+        if name in checked:
+            value = checked[name]
+            return value.strip() if isinstance(value, str) else ""
+        return (current.stored.get(name) or "").strip()
+
+    if "hosts allow" not in checked and "hosts deny" not in checked:
         return
 
-    verdict = hosts_verdict(allow, current.own_client_address)
-    context = {
-        "option": "hosts allow",
-        "value": allow,
-        "address": current.own_client_address,
-        "address_confidence": current.own_client_address_confidence,
-        "undecidable_entries": verdict.get("undecidable", []),
-    }
+    allow = effective("hosts allow")
+    deny = effective("hosts deny")
+    address = current.own_client_address
 
-    if verdict["verdict"] == "excluded":
+    def refuse(option: str, verdict: dict[str, Any], code: str, message: str) -> None:
         raise InvalidRequest(
-            "This list does not include the address the server sees this console at.",
-            code="hosts_allow_excludes_console",
-            context=context,
+            message,
+            code=code,
+            context={
+                "option": option,
+                "value": allow if option == "hosts allow" else deny,
+                "address": address,
+                "address_confidence": current.own_client_address_confidence,
+                "undecidable_entries": verdict.get("undecidable", []),
+            },
         )
 
-    if verdict["verdict"] == "undecidable" and UNDECIDABLE_CONFIRM not in confirm:
+    def undecidable(option: str, verdict: dict[str, Any], code: str, message: str) -> None:
+        token = UNDECIDABLE_CONFIRM_FOR[option]
+        if token in confirm:
+            return
         raise InvalidRequest(
-            "Whether this list still admits this console could not be decided.",
-            code="hosts_allow_undecidable",
+            message,
+            code=code,
             context={
-                **context,
+                "option": option,
+                "value": allow if option == "hosts allow" else deny,
+                "address": address,
+                "address_confidence": current.own_client_address_confidence,
+                "undecidable_entries": verdict.get("undecidable", []),
                 "reason": verdict.get("reason"),
                 # What the interface has to send back to proceed.
-                "confirm_with": UNDECIDABLE_CONFIRM,
+                "confirm_with": token,
             },
+        )
+
+    if allow:
+        verdict = hosts_verdict(allow, address)
+        if verdict["verdict"] == "covered":
+            # An allow that covers us settles it: Samba admits a host on both
+            # lists, so no deny below can shut this console out.
+            return
+        if verdict["verdict"] == "excluded":
+            refuse(
+                "hosts allow",
+                verdict,
+                "hosts_allow_excludes_console",
+                "This list does not include the address the server sees this console at.",
+            )
+        undecidable(
+            "hosts allow",
+            verdict,
+            "hosts_allow_undecidable",
+            "Whether this list still admits this console could not be decided.",
+        )
+        # Undecidable and confirmed. The deny below is then unjudgeable too —
+        # it only matters if the allow does not cover us, and that is the thing
+        # that could not be established.
+        return
+
+    if not deny:
+        return
+
+    # No allow list, so the deny list is what decides. `covered` here means the
+    # deny names us, which is the lockout — the opposite sense to above, and
+    # the reason this is not one loop over two options.
+    verdict = hosts_verdict(deny, address)
+    if verdict["verdict"] == "covered":
+        refuse(
+            "hosts deny",
+            verdict,
+            "hosts_deny_includes_console",
+            "This list names the address the server sees this console at, and nothing admits it.",
+        )
+    if verdict["verdict"] == "undecidable":
+        undecidable(
+            "hosts deny",
+            verdict,
+            "hosts_deny_undecidable",
+            "Whether this list shuts this console out could not be decided.",
         )
 
 
@@ -1745,6 +1818,8 @@ __all__ = [
     "BY_NAME",
     "CATALOGUE",
     "GROUPS",
+    "UNDECIDABLE_CONFIRM",
+    "UNDECIDABLE_CONFIRM_FOR",
     "GlobalConfig",
     "GlobalOption",
     "HostEntry",
