@@ -140,6 +140,52 @@ def read_options(conn: ServerConnection, section: str) -> dict[str, str]:
         return {}
 
 
+def read_all(conn: ServerConnection) -> dict[str, dict[str, str]]:
+    """Every section's values, in one pass over the store.
+
+    :func:`read_options` opens the hive, opens the smbconf key and opens the
+    section, once per call. Reading a whole server through it is three opens per
+    section for data ``net conf list`` prints in one go. This holds the hive and
+    the smbconf key open and opens each section under them once — N + 2 rather
+    than N x 3. MS-RRP has no call that enumerates a subkey's values from the
+    parent handle, so the per-section open stays; it is the repeated hive walk
+    that goes.
+
+    A section whose values could not be read is **absent from the result**,
+    never present and empty. Those two would be indistinguishable to a caller,
+    and the difference is the difference between "this share stores no options"
+    and "we could not find out what it stores" — the first is a fact about the
+    server and the second is a fact about this session.
+
+    Names come back exactly as the registry spells them, ``global`` included.
+    A caller comparing them against share names has to exclude it: see
+    :func:`samfscon.srv.shares.registry_shares_served` for what happens when
+    one does not.
+    """
+    pipe = conn.winreg
+    sections: dict[str, dict[str, str]] = {}
+
+    with open_smbconf(conn) as root:
+        for name in _enumerate_keys(pipe, root):
+            key = None
+            try:
+                key = _open_key(pipe, root, name, KEY_READ)
+                sections[name] = dict(_enumerate_values(pipe, key))
+            except Exception:  # one bad section must not end the sweep
+                logger.warning(
+                    "the registry section %s could not be read; it is reported as "
+                    "unreadable rather than as empty",
+                    name,
+                )
+                logger.debug("section %s failed", name, exc_info=True)
+            finally:
+                if key is not None:
+                    with contextlib.suppress(Exception):
+                        pipe.CloseKey(key)
+
+    return sections
+
+
 def read_sections(conn: ServerConnection) -> list[str]:
     """The share names that have registry configuration."""
     pipe = conn.winreg
