@@ -251,8 +251,8 @@ Kerberos made unnecessary; guessing the other way would wait for a ticket no KDC
 | 1e | Local users and groups on a standalone server (SAMR) | built |
 | 2 | Global server settings, the diagnostics view, share templates | planned |
 
-**Verification against a live server has started, and the sign-in path is the only part it has
-reached.** Against a Samba AD member it found two faults, both since fixed:
+**Verification against a live server is under way, and it has reached sign-in, the share list and
+the share write path.** Against a Samba AD member it has found a fault in each. The two at sign-in:
 
 - A refused anonymous policy query was read as "this server has no realm", which decided
   *standalone* for a domain member — so the console tried NTLM with a domain password and reported
@@ -264,11 +264,21 @@ reached.** Against a Samba AD member it found two faults, both since fixed:
   policy's own two facts, with a reverse DNS lookup as the last resort, and a sign-in that could
   not possibly work is refused before the password is asked for rather than after.
 
-Everything past the sign-in — shares, permissions, sessions, accounts — is still unproven against a
-real server. The unit suite (136 tests) covers what does not need one, and the CI runs it. The RPC
-call shapes are written against the protocol specifications with a tolerant-signature helper around
-each, because the Samba python bindings have changed those signatures between releases. That helper
-is a mitigation, not a substitute for the test: see [Verifying it](#verifying-it).
+Reading and writing shares has since been exercised the same way, and cost more than the sign-in
+did. `NetShareAdd` turned out to require an `add share command` in `smb.conf` unconditionally, with
+no exemption for registry shares, so creating one had to be rewritten to go through `winreg` — which
+then needed four separate corrections to the registry call shapes before a share appeared in
+`net conf list`. Trustee names were being rendered as raw SIDs because every LSA lookup was passing
+an argument the wire format derives. And a share's path was shown as `C:	ank\share`, because
+srvsvc has to answer with a Windows path and Samba fabricates a drive letter for one.
+
+**What remains unproven against a real server is permissions, sessions and accounts** — the write
+paths in particular. The unit suite (258 backend tests and 73 in the front end) covers what does not
+need a server, and the CI runs both. The RPC call shapes are written against the protocol
+specifications with a tolerant-signature helper around each, because the Samba python bindings have
+changed those signatures between releases. Every fault listed above was found by a real server
+regardless, which is the point: that helper is a mitigation, not a substitute for the test. See
+[Verifying it](#verifying-it).
 
 ### Shares
 

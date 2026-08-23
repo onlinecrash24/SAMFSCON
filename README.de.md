@@ -263,8 +263,9 @@ hieße, auf ein Ticket zu warten, das kein KDC ausstellen wird.
 | 1e | Lokale Benutzer und Gruppen auf einem eigenständigen Server (SAMR) | gebaut |
 | 2 | Globale Servereinstellungen, Diagnoseansicht, Freigabevorlagen | geplant |
 
-**Die Verifikation gegen einen laufenden Server hat begonnen und ist bisher nur bis zur Anmeldung
-gekommen.** Gegen ein Samba-AD-Mitglied hat sie zwei Fehler gefunden, beide behoben:
+**Die Verifikation gegen einen laufenden Server läuft und hat die Anmeldung, die Freigabenliste
+und den Schreibweg für Freigaben erreicht.** Gegen ein Samba-AD-Mitglied hat sie in jedem davon
+etwas gefunden. Die beiden bei der Anmeldung:
 
 - Eine abgelehnte anonyme Policy-Abfrage wurde als „dieser Server hat keinen Realm“ gelesen und
   entschied damit *eigenständig* für ein Domänenmitglied — die Konsole versuchte NTLM mit einem
@@ -277,12 +278,23 @@ gekommen.** Gegen ein Samba-AD-Mitglied hat sie zwei Fehler gefunden, beide beho
   Lookup als letzter Möglichkeit — und eine Anmeldung, die gar nicht funktionieren kann, wird vor
   der Passwortabfrage abgelehnt statt danach.
 
-Alles hinter der Anmeldung — Freigaben, Berechtigungen, Sitzungen, Konten — ist gegen einen echten
-Server weiterhin unbewiesen. Die Unit-Suite (136 Tests) deckt ab, was ohne einen auskommt, und die
-CI führt sie aus. Die Formen der RPC-Aufrufe sind gegen die Protokollspezifikationen geschrieben,
-jede mit einem Helfer umgeben, der mehrere Signaturen durchprobiert, weil die Python-Bindings von
-Samba diese Signaturen zwischen Versionen geändert haben. Dieser Helfer ist eine Abmilderung, kein
-Ersatz für den Test: siehe [Verifikation](#verifikation).
+Freigaben lesen und schreiben ist seither auf demselben Weg geprüft worden und hat mehr gekostet
+als die Anmeldung. `NetShareAdd` verlangt, wie sich herausstellte, ausnahmslos ein
+`add share command` in der `smb.conf`, auch für Registry-Freigaben — das Anlegen musste also auf
+`winreg` umgeschrieben werden, was dann vier Korrekturen an den Registry-Aufrufformen brauchte, bis
+eine Freigabe in `net conf list` auftauchte. Trustee-Namen erschienen als nackte SIDs, weil jede
+LSA-Abfrage ein Argument mitgab, das das Wire-Format selbst ableitet. Und der Pfad einer Freigabe
+stand als `C:	ank\share` da, weil srvsvc mit einem Windows-Pfad antworten muss und Samba dafür
+einen Laufwerksbuchstaben erfindet.
+
+**Unbewiesen gegen einen echten Server bleiben Berechtigungen, Sitzungen und Konten** — die
+Schreibwege besonders. Die Unit-Suite (258 Tests im Backend, 73 im Frontend) deckt ab, was ohne
+Server auskommt, und die CI führt beide aus. Die Formen der RPC-Aufrufe sind gegen die
+Protokollspezifikationen geschrieben, jede mit einem Helfer umgeben, der mehrere Signaturen
+durchprobiert, weil die Python-Bindings von Samba diese Signaturen zwischen Versionen geändert
+haben. Gefunden wurde jeder der oben genannten Fehler trotzdem erst von einem echten Server, und
+das ist der Punkt: dieser Helfer ist eine Abmilderung, kein Ersatz für den Test. Siehe
+[Verifikation](#verifikation).
 
 ### Freigaben
 
