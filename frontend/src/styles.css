@@ -545,6 +545,13 @@ button:focus-visible {
   padding: 16px;
   z-index: 50;
 }
+/* Only the topmost overlay tints the page; the rest are a positioning layer
+   and nothing else. Two dialogs each at 45% black give 70%, and the lower one
+   goes from legible alone to unreadable in a pair.
+
+   After the rule it overrides, not before. Both are one class, so specificity
+   is equal and source order is all there is. */
+.modal__backdrop--stacked { background: none; }
 .modal {
   width: 100%;
   max-width: 480px;
@@ -567,30 +574,6 @@ button:focus-visible {
 .modal__close { background: none; border: none; font-size: 1.3em; color: var(--text-muted); cursor: pointer; }
 .modal__body { padding: 16px; overflow: auto; }
 
-/* A console window, not a form: a fixed height, so the panes inside can divide
-   it up instead of the dialog growing until the screen runs out. */
-.modal--console { max-width: min(1180px, 96vw); height: min(880px, 92vh); max-height: none; }
-/* A column, so a pane that asks for the leftover height gets the height left
-   *beside the tabs* rather than the whole body — the two differ by exactly the
-   tab row, which is enough to push the panes out through the bottom.
-
-   The body itself does not scroll: everything below the tabs lives in a panel
-   that scrolls on its own. Letting the body scroll takes the tab row with it,
-   and a tab holding a long list then leaves no way back to the others. */
-.modal--console .modal__body {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-.modal__panel {
-  flex: 1;
-  min-height: 0;
-  overflow: auto;
-  display: flex;
-  flex-direction: column;
-}
 .modal__footer { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--border); }
 
 .form__grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 12px; }
