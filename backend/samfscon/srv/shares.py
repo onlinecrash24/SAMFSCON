@@ -469,12 +469,22 @@ def _registry_sections(conn: ServerConnection) -> set[str] | None:
     ``None`` when the registry could not be read at all — deliberately not an
     empty set, which would claim every share is uneditable as a fact rather
     than as a consequence of not having looked.
+
+    ``global`` is dropped, because it is a section and not a share. Leaving it
+    in was wrong in a way that took a button away: a server with global
+    settings in the registry and no registry shares — which is what
+    ``include = registry`` on its own produces, and it is common — had a
+    non-empty section set that intersected the live share list nowhere, so
+    :func:`registry_shares_served` concluded the server ignores its registry
+    and the console stopped offering to create a share.
     """
     try:
-        return {name.lower() for name in registry.read_sections(conn)}
+        names = {name.lower() for name in registry.read_sections(conn)}
     except Exception:  # a server without registry config is normal
         logger.debug("the registry configuration could not be enumerated", exc_info=True)
         return None
+
+    return names - {registry.GLOBAL_SECTION}
 
 
 def registry_shares_served(conn: ServerConnection) -> bool | None:
