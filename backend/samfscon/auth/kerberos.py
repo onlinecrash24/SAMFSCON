@@ -201,19 +201,39 @@ def _acquire_via_bindings(
     return True
 
 
+def _krb5_env(ccache: Path | None = None) -> dict[str, str]:
+    """The environment every Kerberos command runs in.
+
+    TZ is pinned rather than assumed. klist prints local time, and
+    :func:`ticket_expiry` reads what it prints as UTC — an assumption that held
+    only for as long as nobody set a timezone on the container. Set here, the
+    condition the reader below depends on is part of the call instead of a
+    property of the deployment.
+
+    Getting it wrong is quiet and late: with the offset running forwards the
+    ticket is thought to last longer than it does, so the session outlives it
+    and calls fail partway through somebody's work rather than returning them
+    to the sign-in screen.
+    """
+    from samfscon.auth.krb5conf import get_krb5_configuration
+
+    env = dict(os.environ)
+    env["TZ"] = "UTC"
+    if ccache is not None:
+        env["KRB5CCNAME"] = ccache_url(ccache)
+    # The generated configuration knows every realm SAMFSCON has been pointed
+    # at, including the KDC addresses that were given explicitly.
+    env.update(get_krb5_configuration().environment())
+    return env
+
+
 def _acquire_via_kinit(principal: Principal, password: str, ccache: Path) -> None:
     """Obtain a TGT by running kinit with the password on stdin.
 
     The password goes through a pipe, never through argv, so it does not show
     up in the process list.
     """
-    from samfscon.auth.krb5conf import get_krb5_configuration
-
-    env = dict(os.environ)
-    env["KRB5CCNAME"] = ccache_url(ccache)
-    # The generated configuration knows every realm SAMFSCON has been pointed
-    # at, including the KDC addresses that were given explicitly.
-    env.update(get_krb5_configuration().environment())
+    env = _krb5_env(ccache)
 
     try:
         result = subprocess.run(
@@ -315,10 +335,7 @@ def has_ticket(ccache: Path) -> bool | None:
     reliable check. Returns ``None`` when klist is unavailable — then the caller
     must not treat the outcome as a failure.
     """
-    from samfscon.auth.krb5conf import get_krb5_configuration
-
-    env = dict(os.environ)
-    env.update(get_krb5_configuration().environment())
+    env = _krb5_env()
 
     try:
         result = subprocess.run(
@@ -347,10 +364,7 @@ def ticket_expiry(ccache: Path) -> datetime | None:
     Returns ``None`` when it cannot be determined; the caller then falls back to
     its configured session lifetime.
     """
-    from samfscon.auth.krb5conf import get_krb5_configuration
-
-    env = dict(os.environ)
-    env.update(get_krb5_configuration().environment())
+    env = _krb5_env()
 
     try:
         result = subprocess.run(
@@ -376,7 +390,7 @@ def ticket_expiry(ccache: Path) -> datetime | None:
             naive = datetime.strptime(f"{date_part} {time_part}", fmt)
         except ValueError:
             continue
-        # klist prints local time; the container runs in UTC.
+        # klist printed local time, and _krb5_env made local time UTC.
         return naive.replace(tzinfo=UTC)
     return None
 
