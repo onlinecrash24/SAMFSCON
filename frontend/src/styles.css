@@ -837,6 +837,30 @@ fieldset[disabled] { opacity: 0.6; }
 
 
 /* --------------------------------------------------------------------- */
+/* The line between two panes                                            */
+/* --------------------------------------------------------------------- */
+
+/* Five pixels wide so it can be grabbed, with four of them transparent
+   border: background-clip leaves exactly the middle pixel painted, so what
+   shows is still a hairline and not a bar. */
+.splitter {
+  background: var(--border);
+  background-clip: content-box;
+  border-left: 2px solid transparent;
+  border-right: 2px solid transparent;
+  cursor: col-resize;
+  /* Or a touch drag scrolls the pane underneath instead of moving the line. */
+  touch-action: none;
+}
+.splitter:hover,
+.splitter:focus-visible { background-color: var(--accent); outline: none; }
+
+/* While a boundary is being dragged: one cursor for the whole page, and no
+   text selecting itself as the pointer sweeps across the panes. Set by
+   usePointerDrag, so a window drag gets it too. */
+body.is-resizing { cursor: col-resize; user-select: none; }
+
+/* --------------------------------------------------------------------- */
 /* Windows and the taskbar                                               */
 /* --------------------------------------------------------------------- */
 
