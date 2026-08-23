@@ -154,3 +154,61 @@ def test_effective_access_asks_for_all_three_of_its_inputs() -> None:
 def test_the_option_catalogue_takes_the_language_it_is_rendered_in() -> None:
     """The explanations are translated server-side, so the route has to know."""
     assert "language" in parameters_of("/api/v1/shares/catalogue")
+
+
+# ---------------------------------------------------------------------------
+# The server settings
+# ---------------------------------------------------------------------------
+
+
+def test_the_configuration_routes_are_registered() -> None:
+    """A router written and never included fails as a 404.
+
+    Which reads, from the browser, exactly like a mistake in the front end.
+    Both halves of the registration are needed — the import tuple and the
+    include_router line — and only this notices when one of them is missing.
+    """
+    paths = schema()["paths"]
+    assert "/api/v1/config" in paths
+    assert "/api/v1/config/catalogue" in paths
+    assert "patch" in paths["/api/v1/config"]
+
+
+def test_the_global_catalogue_takes_the_language_it_is_rendered_in() -> None:
+    """The same gap the share catalogue closed, on the settings side."""
+    parameters = parameters_of("/api/v1/config/catalogue")
+    assert "language" in parameters
+    # And nothing else: the mode comes from the session, not from the caller.
+    # A mode in the query string would be a fact with two owners.
+    assert "mode" not in parameters
+
+
+def test_the_catalogue_language_is_a_closed_set() -> None:
+    """Declared as a pattern, so an unknown value is refused rather than defaulted.
+
+    Read off the schema rather than by calling: what the route accepts is what
+    it declares, and a runtime `if` inside the handler would not appear here.
+    """
+    language = parameters_of("/api/v1/config/catalogue")["language"]
+    assert language["schema"].get("pattern") == "^(de|en)$"
+
+
+def test_a_configuration_write_is_refused_without_the_csrf_header(client: TestClient) -> None:
+    """VerifiedSession, not CurrentSession — the double-submit lives there.
+
+    Without a session this is a 401 either way, so the check that matters is
+    the declaration: the write must not be reachable through the dependency
+    that skips the CSRF header.
+    """
+    import inspect
+
+    from samfscon.api.v1 import config
+
+    signature = inspect.signature(config.update_config)
+    annotations = {str(p.annotation) for p in signature.parameters.values()}
+    assert any("VerifiedSession" in a for a in annotations)
+    assert any("VerifiedWorker" in a for a in annotations)
+    assert not any("CurrentSession" in a for a in annotations)
+
+    response = client.patch("/api/v1/config", json={"options": {}})
+    assert response.status_code == 401

@@ -25,6 +25,7 @@ useful.
 from __future__ import annotations
 
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -553,59 +554,77 @@ def validate(options: dict[str, str | None]) -> dict[str, str | None]:
 
 
 def _validate_one(option: Option, value: str) -> str:
+    return validate_value(option.name, option.type, option.choices, value)
+
+
+def validate_value(name: str, type: str, choices: Sequence[str], value: str) -> str:
+    """Normalise one option value, or refuse it.
+
+    Primitives rather than an :class:`Option`, so the settings catalogue can
+    reach it without ``globalconf.GlobalOption`` having to inherit from this
+    module's dataclass and pick up a coupling neither of them wants. One
+    normaliser and not two, because two would let ``Yes`` round-trip
+    differently between the share sheet and the settings sheet.
+    """
     text = value.strip()
 
-    if option.type == TYPE_BOOL:
+    if type == TYPE_BOOL:
         lowered = text.lower()
         if lowered in _YES:
             return "yes"
         if lowered in _NO:
             return "no"
         raise InvalidRequest(
-            f"{option.name!r} takes yes or no.",
+            f"{name!r} takes yes or no.",
             code="invalid_option_value",
-            context={"option": option.name, "value": value},
+            context={"option": name, "value": value},
         )
 
-    if option.type == TYPE_MODE:
+    if type == TYPE_MODE:
         if not _MODE_RE.match(text):
             raise InvalidRequest(
-                f"{option.name!r} takes an octal permission mask such as 0750.",
+                f"{name!r} takes an octal permission mask such as 0750.",
                 code="invalid_option_value",
-                context={"option": option.name, "value": value},
+                context={"option": name, "value": value},
             )
         # Normalised to four digits, the way smb.conf writes them, so a value
         # that came back from the server compares equal to the one sent.
         return text.zfill(4) if not text.startswith("0") else text.rjust(4, "0")
 
-    if option.type == TYPE_INT:
+    if type == TYPE_INT:
         try:
             number = int(text)
         except ValueError as exc:
             raise InvalidRequest(
-                f"{option.name!r} takes a number.",
+                f"{name!r} takes a number.",
                 code="invalid_option_value",
-                context={"option": option.name, "value": value},
+                context={"option": name, "value": value},
             ) from exc
         if number < 0:
             raise InvalidRequest(
-                f"{option.name!r} cannot be negative.",
+                f"{name!r} cannot be negative.",
                 code="invalid_option_value",
-                context={"option": option.name, "value": value},
+                context={"option": name, "value": value},
             )
         return str(number)
 
-    if option.type == TYPE_CHOICE:
-        lowered = text.lower()
-        if lowered not in option.choices:
-            raise InvalidRequest(
-                f"{option.name!r} takes one of: {', '.join(option.choices)}.",
-                code="invalid_option_value",
-                context={"option": option.name, "value": value, "allowed": list(option.choices)},
-            )
-        return lowered
+    if type == TYPE_CHOICE:
+        # Matched without regard to case, and returned in the catalogue's own
+        # spelling rather than lower-cased. Behaviour-preserving for the share
+        # options, whose choices are all lower case already, and correct for
+        # the globals: SMB3_11 stored as smb3_11 is the same value to the
+        # parser and a different one to every document and every `net conf
+        # list` output somebody compares it against.
+        for choice in choices:
+            if choice.lower() == text.lower():
+                return choice
+        raise InvalidRequest(
+            f"{name!r} takes one of: {', '.join(choices)}.",
+            code="invalid_option_value",
+            context={"option": name, "value": value, "allowed": list(choices)},
+        )
 
-    if option.type == TYPE_LIST:
+    if type == TYPE_LIST:
         # Samba separates these with spaces, and accepts commas. Normalised to
         # spaces so a value written here reads the same as one `net conf` shows.
         items = [item for item in re.split(r"[,\s]+", text) if item]

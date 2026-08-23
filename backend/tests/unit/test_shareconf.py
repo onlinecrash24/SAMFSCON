@@ -349,3 +349,40 @@ def test_a_name_buffer_is_filled_in_rather_than_only_sized() -> None:
     source = inspect.getsource(registry._name_buffer)
     for member in ("buffer.name", "buffer.size", "buffer.length"):
         assert member in source, f"{member} is not set"
+
+
+def test_a_choice_is_returned_in_the_catalogue_s_spelling() -> None:
+    """Matched without regard to case, stored the way the documentation writes it.
+
+    The share options all spell their choices in lower case, so this is
+    behaviour-preserving here and load-bearing next door: `SMB3_11` stored as
+    `smb3_11` is the same value to the parser and a different one to every
+    document and every `net conf list` output somebody compares it against.
+    """
+    from samfscon.srv import shareconf
+
+    assert (
+        shareconf.validate_value("dialect", shareconf.TYPE_CHOICE, ("SMB3_11", "NT1"), "smb3_11")
+        == "SMB3_11"
+    )
+    assert (
+        shareconf.validate_value("order", shareconf.TYPE_CHOICE, ("asc", "desc"), " DESC ")
+        == "desc"
+    )
+
+
+def test_validate_value_is_reachable_without_an_option_object() -> None:
+    """One normaliser for both catalogues, and it takes primitives.
+
+    Two would let `Yes` round-trip differently between the share sheet and the
+    settings sheet — the same word, two stored values, and no way to tell from
+    either screen which one is on the server.
+    """
+    from samfscon.srv import globalconf, shareconf
+
+    assert shareconf.validate_value("a switch", shareconf.TYPE_BOOL, (), "Yes") == "yes"
+    assert globalconf._validate_one.__doc__ is not None
+    for option in globalconf.CATALOGUE:
+        if option.type == shareconf.TYPE_BOOL:
+            assert globalconf._validate_one(option, "Yes") == "yes"
+            break

@@ -371,6 +371,40 @@ def require_share_management(caps: Capabilities) -> None:
     # and that path checks it for itself.
 
 
+def require_configuration_write(caps: Capabilities) -> None:
+    """Refuse a global-settings write before it reaches the server.
+
+    The same two checks as :func:`require_share_management`, and a separate
+    function only because of the hints. Reusing that one would refuse a change
+    to the server's own settings with a message about managing shares over the
+    network, which is true of the mechanism and wrong about the task: an
+    administrator would go looking for a share that has nothing to do with it.
+    """
+    from samfscon.core.errors import NotConfigured, PermissionDenied
+
+    if caps.registry_config is False:
+        raise NotConfigured(
+            "This server does not keep its settings where SAMFSCON can change them.",
+            code="registry_config_missing",
+            hint=(
+                "Add 'include = registry' to the [global] section of the "
+                "server's smb.conf and reload Samba. The line has to come "
+                "before anything it should be able to override — options set "
+                "above it win. Reading works without it; only changes need it."
+            ),
+        )
+    if caps.registry_writable is False:
+        raise PermissionDenied(
+            "Your account may not change this server's settings.",
+            code="registry_not_writable",
+            hint=(
+                "The global settings live in the registry configuration under "
+                r"HKLM\Software\Samba\smbconf, and this account may read it "
+                "but not change it."
+            ),
+        )
+
+
 def _grant_command_from(caps: Capabilities) -> str:
     """The command out of whichever note carries it."""
     for note in caps.notes:

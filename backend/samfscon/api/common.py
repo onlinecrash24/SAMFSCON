@@ -63,6 +63,14 @@ SharePath = Annotated[str, Path(min_length=1, max_length=80, description="Share 
 # and is valid — it is the path the permissions tab of a share edits.
 PathQuery = Annotated[str, Query(max_length=4096, description="Path inside the share")]
 
+# Which language the catalogue documentation comes back in. A pattern at the
+# route rather than a runtime check: the value selects a code path, so anything
+# else is refused rather than quietly defaulted, and the refusal arrives as a
+# 422 inside the shared envelope with no handler code of its own.
+LanguageQuery = Annotated[
+    str, Query(pattern="^(de|en)$", description="Language for the documentation strings")
+]
+
 
 def split_csv(value: str | None) -> list[str] | None:
     if not value:

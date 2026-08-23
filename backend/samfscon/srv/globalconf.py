@@ -46,6 +46,7 @@ from typing import Any
 
 from samfscon.config import MODE_AD_MEMBER
 from samfscon.core.errors import InvalidRequest
+from samfscon.srv import shareconf
 from samfscon.srv.shareconf import TYPE_BOOL, TYPE_CHOICE, TYPE_INT, TYPE_LIST, TYPE_TEXT
 
 logger = logging.getLogger(__name__)
@@ -950,55 +951,8 @@ def validate(
 
 
 def _validate_one(option: GlobalOption, value: str) -> str:
-    text = value.strip()
-
-    if option.type == TYPE_BOOL:
-        lowered = text.lower()
-        if lowered in _YES:
-            return "yes"
-        if lowered in _NO:
-            return "no"
-        raise InvalidRequest(
-            f"{option.name!r} takes yes or no.",
-            code="invalid_option_value",
-            context={"option": option.name, "value": value},
-        )
-
-    if option.type == TYPE_INT:
-        try:
-            number = int(text)
-        except ValueError as exc:
-            raise InvalidRequest(
-                f"{option.name!r} takes a number.",
-                code="invalid_option_value",
-                context={"option": option.name, "value": value},
-            ) from exc
-        if number < 0:
-            raise InvalidRequest(
-                f"{option.name!r} cannot be negative.",
-                code="invalid_option_value",
-                context={"option": option.name, "value": value},
-            )
-        return str(number)
-
-    if option.type == TYPE_CHOICE:
-        # Matched without regard to case and stored in the catalogue's own
-        # spelling. Samba accepts either, and `net conf list` then shows the
-        # form the documentation uses rather than whatever was typed.
-        for choice in option.choices:
-            if choice.lower() == text.lower():
-                return choice
-        raise InvalidRequest(
-            f"{option.name!r} takes one of: {', '.join(option.choices)}.",
-            code="invalid_option_value",
-            context={"option": option.name, "value": value, "allowed": list(option.choices)},
-        )
-
-    if option.type == TYPE_LIST:
-        items = [item for item in re.split(r"[,\s]+", text) if item]
-        return " ".join(items)
-
-    return text
+    """One normaliser for both catalogues — see shareconf.validate_value."""
+    return shareconf.validate_value(option.name, option.type, option.choices, value)
 
 
 # ---------------------------------------------------------------------------
@@ -1608,7 +1562,7 @@ def write(
     from samfscon.srv import diagnostics, registry
 
     caps = diagnostics.capabilities(conn)
-    diagnostics.require_share_management(caps)
+    diagnostics.require_configuration_write(caps)
 
     current = read(conn)
     checked = validate(options, mode=current.mode, confirm=confirm)

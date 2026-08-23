@@ -13,7 +13,7 @@ from typing import Any
 
 from fastapi import APIRouter
 
-from samfscon.api.common import Audit, SharePath
+from samfscon.api.common import Audit, LanguageQuery, SharePath
 from samfscon.auth.deps import CurrentSession, VerifiedSession, VerifiedWorker, Worker
 from samfscon.schemas.requests import ShareCreateRequest, ShareUpdateRequest
 from samfscon.srv import diagnostics, shareconf, shares
@@ -51,7 +51,9 @@ async def list_shares(
 
 
 @router.get("/catalogue")
-async def option_catalogue(session: CurrentSession, language: str = "en") -> dict[str, Any]:
+async def option_catalogue(
+    session: CurrentSession, language: LanguageQuery = "en"
+) -> dict[str, Any]:
     """The share options the interface can build forms from.
 
     Static, and deliberately not behind a server round trip: it describes what

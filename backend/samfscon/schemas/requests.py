@@ -118,6 +118,38 @@ class ShareUpdateRequest(BaseModel):
         return ShareCreateRequest._absolute_path(value)
 
 
+class GlobalConfigUpdateRequest(BaseModel):
+    """A change to the server's global configuration.
+
+    ``options`` mirrors :class:`ShareUpdateRequest`'s: a key set to null removes
+    the option, which is how it goes back to the server's default —
+    deliberately different from an empty string, which the smb.conf parser
+    honours as a value.
+    """
+
+    options: dict[str, str | None] = Field(default_factory=dict)
+    # The risky options the caller is accepting, by name. Named rather than one
+    # boolean so a form that grows a new risky option next month cannot be
+    # blanket-confirmed by a client written today that never knew about it.
+    confirm: list[str] = Field(default_factory=list, max_length=64)
+    # Create the registry global section if the server has none. Refused
+    # without this, because a global section the server does not read is the
+    # one outcome worse than no change at all.
+    create_section: bool = False
+
+    @field_validator("options", mode="after")
+    @classmethod
+    def _bounded(cls, value: dict[str, str | None]) -> dict[str, str | None]:
+        if len(value) > 64:
+            raise ValueError("too many options in one change")
+        for name, item in value.items():
+            if not name.strip() or len(name) > 128:
+                raise ValueError(f"{name!r} is not a usable option name")
+            if item is not None and len(item) > 4096:
+                raise ValueError(f"the value for {name!r} is too long")
+        return value
+
+
 class SecurityDescriptorRequest(BaseModel):
     """Replace a security descriptor, share-level or on a file.
 
