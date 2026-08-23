@@ -24,7 +24,7 @@ import type {
   InForceEvidence,
   LiveValue,
 } from '../../api/types'
-import { Badge, Banner, ErrorMessage, Field, Modal, Spinner } from '../../components/primitives'
+import { Badge, Banner, ErrorMessage, Modal, Spinner } from '../../components/primitives'
 import { useI18n } from '../../i18n'
 import type { MessageKey } from '../../i18n/messages'
 import { asPayload, changedOptions, confirmationsFor, type Change } from './changes'
@@ -135,9 +135,10 @@ export function ServerSettingsView({ onChanged }: { onChanged: (message: string)
       </div>
 
       <div className="table-scroll">
-        {/* Always, and first: everything below is about one of the two places
-            a global option can live, and the screen has to say which. */}
-        <Banner message={t('config.registryOnly')} />
+        {/* Always true, so not an alert. A box that is on every visit is a box
+            people learn to skip — and the two below it, which are not always
+            there, arrive in the same shape. */}
+        <p className="muted small config__standing">{t('config.registryOnly')}</p>
 
         {loaded.section_present === false && (
           <Banner tone="warning" message={t('config.sectionAbsent')} />
@@ -338,122 +339,116 @@ function GlobalOptionField({
   const readOnly = spec.safety === 'read_only'
   const locked = disabled || readOnly
 
+  // One muted line rather than two. When this option starts mattering, and what
+  // Samba does when nothing sets it, are both statements about Samba — they
+  // belong together and below, not stacked as if each were news.
   const reference = spec.default
     ? t('config.defaultIs', { value: spec.default })
     : spec.default_note
       ? t(`config.defaultNote.${spec.default_note}` as MessageKey)
       : null
+  const effect =
+    t(`config.effect.${spec.effect}` as MessageKey) +
+    (spec.effect === 'restart' && spec.daemons.length > 0
+      ? ` (${spec.daemons.join(', ')})`
+      : '')
 
-  const badges = (
-    <div className="config__badges">
-      {readOnly && <Badge tone="muted">{t('config.readOnly')}</Badge>}
-      {spec.safety === 'risky' && <Badge tone="warn">{t('config.risky')}</Badge>}
-      <span className="muted small">
-        {t(`config.effect.${spec.effect}` as MessageKey)}
-        {spec.effect === 'restart' && spec.daemons.length > 0
-          ? ` · ${t('config.effect.daemons', { names: spec.daemons.join(', ') })}`
-          : ''}
-      </span>
-    </div>
-  )
-
-  const under = (
-    <>
-      {badges}
-      {reference && <span className="config__default">{reference}</span>}
-      {readOnly && spec.read_only_reason && (
-        <span className="config__default">
-          {t(`config.readOnly.${spec.read_only_reason}` as MessageKey)}
-        </span>
-      )}
-      {spec.safety === 'risky' && spec.risk && (
-        <span className="config__default">{riskText(spec, risks, t)}</span>
-      )}
-    </>
-  )
-
+  let control
   if (spec.type === 'bool') {
     // Three states, and the third is drawn differently from the share sheet on
     // purpose. There, unstored means Samba's default really does apply. Here it
     // means "not in the registry", and the text smb.conf this console cannot
     // read may well set it — so a checkbox drawn from Samba's default would be
     // asserting this server's value from something that says nothing about it.
-    return (
-      <div className="config__option">
-        <label className="checkbox">
-          <input
-            type="checkbox"
-            checked={stored && value === 'yes'}
-            disabled={locked}
-            // `indeterminate` is a DOM property and not an attribute: as a JSX
-            // prop it compiles, renders, and does nothing at all.
-            ref={(element) => {
-              if (element) element.indeterminate = !stored
-            }}
-            onChange={(event) => onChange(event.target.checked ? 'yes' : 'no')}
-          />
-          <span className="mono">{spec.name}</span>
-          {!stored && (
-            <span className="option__default" title={t('config.notSetHere.why')}>
-              {t('config.notSetHere')}
-            </span>
-          )}
-        </label>
-        <span className="field__hint">{spec.doc}</span>
-        {under}
-      </div>
+    control = (
+      <label className="checkbox">
+        <input
+          type="checkbox"
+          checked={stored && value === 'yes'}
+          disabled={locked}
+          // `indeterminate` is a DOM property and not an attribute: as a JSX
+          // prop it compiles, renders, and does nothing at all.
+          ref={(element) => {
+            if (element) element.indeterminate = !stored
+          }}
+          onChange={(event) => onChange(event.target.checked ? 'yes' : 'no')}
+        />
+        <span className="muted small">
+          {stored ? t(`config.bool.${value === 'yes' ? 'yes' : 'no'}`) : t('config.notSetHere')}
+        </span>
+      </label>
     )
-  }
-
-  if (spec.type === 'choice') {
+  } else if (spec.type === 'choice') {
     // A stored value the catalogue does not list gets its own entry. Without
     // it the select renders blank and the next save quietly rewrites a value
     // somebody chose — the server's configuration lost to a dropdown.
     const unlisted = stored && !spec.choices.includes(value)
-    return (
-      <div className="config__option">
-        <Field label={spec.name} hint={spec.doc}>
-          <select
-            value={value}
-            disabled={locked}
-            onChange={(event) => onChange(event.target.value)}
-          >
-            <option value="">{t('config.notSetHere')}</option>
-            {unlisted && (
-              <option value={value}>
-                {value} ({t('config.unlistedValue')})
-              </option>
-            )}
-            {spec.choices.map((choice) => (
-              <option key={choice} value={choice}>
-                {choice}
-              </option>
-            ))}
-          </select>
-        </Field>
-        {under}
-      </div>
+    control = (
+      <select value={value} disabled={locked} onChange={(event) => onChange(event.target.value)}>
+        <option value="">{t('config.notSetHere')}</option>
+        {unlisted && (
+          <option value={value}>
+            {value} ({t('config.unlistedValue')})
+          </option>
+        )}
+        {spec.choices.map((choice) => (
+          <option key={choice} value={choice}>
+            {choice}
+          </option>
+        ))}
+      </select>
+    )
+  } else {
+    control = (
+      <input
+        type={spec.type === 'int' ? 'number' : 'text'}
+        value={value}
+        disabled={locked}
+        spellCheck={false}
+        // Never the server's default. In the placeholder position it reads as
+        // what this server does, which is exactly what this page cannot know.
+        placeholder={t('config.notSetHere')}
+        onChange={(event) => onChange(event.target.value)}
+      />
     )
   }
 
   return (
+    // Two columns: the name and its badges on the left, the control and
+    // everything said about it on the right. Stacked, thirty-seven options ran
+    // to five lines each and the page could only be read top to bottom; with a
+    // fixed left edge it can be scanned for the one option somebody came for.
     <div className="config__option">
-      <Field label={spec.name} hint={spec.doc}>
-        <input
-          type={spec.type === 'int' ? 'number' : 'text'}
-          value={value}
-          disabled={locked}
-          spellCheck={false}
-          // Never the server's default. In the placeholder position it reads as
-          // what this server does, which is exactly what this page cannot know.
-          placeholder={t('config.notSetHere')}
-          onChange={(event) => onChange(event.target.value)}
-        />
-      </Field>
-      {under}
+      <div className="config__name">
+        <span className="mono">{spec.name}</span>
+        {(readOnly || spec.safety === 'risky') && (
+          <span className="config__badges">
+            {readOnly && <Badge tone="muted">{t('config.readOnly')}</Badge>}
+            {spec.safety === 'risky' && <Badge tone="warn">{t('config.risky')}</Badge>}
+          </span>
+        )}
+      </div>
+
+      <div className="config__control">
+        {control}
+        <span className="field__hint">{spec.doc}</span>
+        <span className="config__default">
+          {effect}
+          {reference ? ` · ${reference}` : ''}
+        </span>
+        {readOnly && spec.read_only_reason && (
+          <span className="config__default">
+            {t(`config.readOnly.${spec.read_only_reason}` as MessageKey)}
+          </span>
+        )}
+        {spec.safety === 'risky' && spec.risk && (
+          <span className="config__warn">{riskText(spec, risks, t)}</span>
+        )}
+      </div>
     </div>
   )
 }
+
 
 // ---------------------------------------------------------------------------
 // The blocks above and below the fields

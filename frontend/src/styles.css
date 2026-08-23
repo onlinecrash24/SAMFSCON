@@ -358,7 +358,12 @@ button:focus-visible {
   background: var(--surface);
   z-index: 1;
 }
-.pane__actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.pane__actions { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+
+/* A quiet line under the header for "when this was read". Not in the header
+   itself: that row is already note-left, actions-right, and a third item would
+   push the actions onto their own line at every narrow width. */
+.pane__subhead { padding: 4px 12px 0; }
 
 /* Narrow: the detail pane wraps to a full-width row under the other two, and
    its splitter goes with it — a boundary that can no longer be dragged
@@ -710,6 +715,14 @@ body.is-resizing { cursor: col-resize; user-select: none; }
   box-shadow: 0 14px 44px rgb(0 0 0 / 30%);
   overflow: hidden;
 }
+/* Belt and braces, and measured rather than assumed: current Chrome hides
+   `[hidden]` with `!important`, so `.window { display: flex }` above does not
+   in fact defeat it. Written down because that `!important` is a user-agent
+   detail and the author rule would win without it — which is how a window
+   that is minimised, or belongs to another console, would keep being drawn.
+   It changes nothing today; it is here so that stays true. */
+.window[hidden] { display: none; }
+
 .window--maximised { inset: 0; width: auto; height: auto; border-radius: 0; }
 
 .window__bar {
@@ -1032,6 +1045,12 @@ body.is-resizing { cursor: col-resize; user-select: none; }
    is a list to a screen reader and a stack of lines to everybody else. */
 .plain-list { list-style: none; margin: 6px 0 0; padding: 0; }
 .plain-list li { padding: 2px 0; }
+
+/* Each unreadable point gets room, because it is now two sentences: what could
+   not be read, and what to do about it. Packed at 2px they ran together and
+   the second half read as part of the next entry. */
+.findings__gap { padding: 6px 0; }
+.findings__todo { display: block; margin-top: 2px; opacity: 0.85; font-size: 0.9em; }
 .findings__label { font-family: var(--font); }
 
 /* The listing scrolls, the header above it does not. A table that carries the
@@ -1144,6 +1163,36 @@ body.is-resizing { cursor: col-resize; user-select: none; }
   font-size: 0.75em;
 }
 
+/* One option, two columns: the name and its badges on the left, the control
+   and everything said about it on the right. Stacked, thirty-seven options ran
+   to five lines each and the tab could only be read top to bottom; with a
+   fixed left edge it can be scanned for the one option somebody came for. */
+.config__option {
+  display: grid;
+  grid-template-columns: minmax(160px, 240px) 1fr;
+  gap: 4px 16px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+  align-items: start;
+}
+.config__option:last-child { border-bottom: none; }
+.config__name { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding-top: 5px; }
+.config__control { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.config__control select,
+.config__control input[type='text'],
+.config__control input[type='number'] { max-width: 460px; }
+.config__standing { margin: 8px 0; }
+/* The risk sentence is the one line here that is a warning, and it has to
+   read as one without becoming a banner on thirteen separate options. */
+.config__warn { font-size: 0.8em; color: var(--warning); }
+
+/* Narrow: back to one column. A 160px label column beside a control leaves
+   neither enough room to be read. */
+@media (max-width: 860px) {
+  .config__option { grid-template-columns: 1fr; }
+  .config__name { padding-top: 0; }
+}
+
 /* The reference line under a global field. Under, not beside, and quieter than
    the doc sentence: it says what Samba does when nothing sets the option, which
    is a statement about Samba and not about this server. Beside the control it
@@ -1165,7 +1214,4 @@ body.is-resizing { cursor: col-resize; user-select: none; }
    opening of the *next* option — the effect line under `server string` looked
    like a statement about `workgroup`. A rule with thirty-seven of them stacked
    flat is also a wall, and the separator is what makes it a list. */
-.config__option { padding: 10px 0; border-bottom: 1px solid var(--border); }
-.config__option:last-child { border-bottom: none; }
-.config__option .field { margin-bottom: 4px; }
-.config__option .checkbox { margin-top: 0; }
+.config__option .checkbox { margin: 2px 0; }

@@ -47,7 +47,6 @@ export function WindowLayer({
           w={window.w}
           h={window.h}
           z={window.z}
-          minimised={window.minimised}
           maximised={window.maximised}
           hidden={window.snapin !== activeSnapin || window.minimised}
           onFocus={() => focus(window.id)}

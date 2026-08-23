@@ -120,17 +120,29 @@ function NotLookedAt({ entries }: { entries: Unreadable[] }) {
   if (entries.length === 0) return null
 
   return (
+    // Inside .alert__body, the way ErrorMessage does it. `.alert` is a flex
+    // *row*, so the heading, the explanation and the list stood side by side
+    // in three columns — the block read as three unrelated fragments, which is
+    // most of why it was hard to follow.
     <section className="alert alert--warning">
-      <strong>{t('findings.unreadableHeading')}</strong>
-      <p>{t('findings.unreadableWhy')}</p>
-      <ul className="plain-list">
-        {entries.map((entry) => (
-          <li key={`${entry.area}:${entry.subject}:${entry.reason}`}>
-            {entry.subject && <span className="mono">{entry.subject}</span>}{' '}
-            {reasonText(t, entry.reason)}
-          </li>
-        ))}
-      </ul>
+      <div className="alert__body">
+        <strong>{t('findings.unreadableHeading')}</strong>
+        <p className="alert__hint">{t('findings.unreadableWhy')}</p>
+        <ul className="plain-list">
+          {entries.map((entry) => (
+            <li key={`${entry.area}:${entry.subject}:${entry.reason}`} className="findings__gap">
+              {entry.subject && <span className="mono">{entry.subject}</span>}{' '}
+              {reasonText(t, entry.reason)}
+              {/* What to do about it. Saying only what could not be read
+                  leaves the reader with a problem and no next step, which is
+                  what "was muss gemacht werden?" is asking. */}
+              <span className="findings__todo">
+                {t('findings.todo')} {text(t, `findings.unreadable.${entry.reason}.do`, '')}
+              </span>
+            </li>
+          ))}
+        </ul>
+      </div>
     </section>
   )
 }

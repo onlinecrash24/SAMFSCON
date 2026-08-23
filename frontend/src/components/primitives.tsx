@@ -346,6 +346,19 @@ export function useDateFormat() {
   }
 }
 
+/** Just the clock, for "read at 20:35" — a date there is noise. */
+export function useTimeFormat() {
+  const { language } = useI18n()
+  return (value: number | string | null | undefined): string => {
+    if (value === null || value === undefined || value === 0) return '—'
+    const parsed = new Date(value)
+    if (Number.isNaN(parsed.getTime())) return '—'
+    return parsed.toLocaleTimeString(language === 'de' ? 'de-DE' : 'en-GB', {
+      timeStyle: 'medium',
+    })
+  }
+}
+
 export function useTypeLabel() {
   const { t } = useI18n()
   return (type: string): string => t(`type.${type}` as MessageKey)

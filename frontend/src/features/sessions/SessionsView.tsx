@@ -17,7 +17,14 @@ import { useState } from 'react'
 
 import { api } from '../../api/endpoints'
 import type { OpenFile, ServerSession } from '../../api/types'
-import { Badge, ErrorMessage, Icon, Modal, Spinner } from '../../components/primitives'
+import {
+  Badge,
+  ErrorMessage,
+  Icon,
+  Modal,
+  Spinner,
+  useTimeFormat,
+} from '../../components/primitives'
 import { useI18n } from '../../i18n'
 
 export function SessionsView({
@@ -33,6 +40,7 @@ export function SessionsView({
   ) => void
 }) {
   const { t, tn } = useI18n()
+  const readAt = useTimeFormat()
   const queryClient = useQueryClient()
   const [filter, setFilter] = useState('')
   const [closing, setClosing] = useState<OpenFile | null>(null)
@@ -73,12 +81,37 @@ export function SessionsView({
     <div className="sessions">
       <div className="pane__header">
         <span className="muted small">{t('snapin.sessions.note')}</span>
-        <input
-          type="search"
-          value={filter}
-          placeholder={t('sessions.filter')}
-          onChange={(event) => setFilter(event.target.value)}
-        />
+        <div className="pane__actions">
+          <input
+            type="search"
+            value={filter}
+            placeholder={t('sessions.filter')}
+            onChange={(event) => setFilter(event.target.value)}
+          />
+          {/* The two tables refetch on a timer, and a button is still worth
+              having: after closing a handle somebody wants to see the answer
+              now, not up to ten seconds from now. It says when the answer is
+              from, because a list that refreshes itself and a list that has
+              stopped refreshing look identical. */}
+          <button
+            type="button"
+            className="button"
+            disabled={sessions.isFetching || files.isFetching}
+            onClick={() => {
+              void queryClient.invalidateQueries({ queryKey: ['sessions'] })
+              void queryClient.invalidateQueries({ queryKey: ['openFiles'] })
+            }}
+          >
+            {sessions.isFetching || files.isFetching ? t('status.loading') : t('action.refresh')}
+          </button>
+        </div>
+      </div>
+      <div className="pane__subhead">
+        <span className="muted small">
+          {sessions.dataUpdatedAt
+            ? t('sessions.readAt', { when: readAt(sessions.dataUpdatedAt) })
+            : ''}
+        </span>
       </div>
 
       <ErrorMessage error={sessions.error} />

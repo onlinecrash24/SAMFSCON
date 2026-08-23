@@ -34,7 +34,6 @@ export interface WindowFrameProps {
   w: number
   h: number
   z: number
-  minimised: boolean
   maximised: boolean
   hidden: boolean
   onFocus: () => void
@@ -53,7 +52,6 @@ export function WindowFrame({
   w,
   h,
   z,
-  minimised,
   maximised,
   hidden,
   onFocus,
@@ -123,9 +121,12 @@ export function WindowFrame({
     },
   })
 
+  // Minimising is not a prop here: WindowLayer folds it into `hidden`
+  // together with "belongs to another console", because the frame does the
+  // same thing in both cases. A second route to one state is how the one that
+  // actually works stops being the obvious one.
   const classes = ['window']
   if (maximised) classes.push('window--maximised')
-  if (minimised) classes.push('window--minimised')
 
   return (
     <div

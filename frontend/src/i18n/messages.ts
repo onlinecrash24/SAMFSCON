@@ -223,6 +223,7 @@ export const de = {
   'sessions.files': 'Offene Dateien',
   'sessions.nobody': 'Zurzeit ist niemand verbunden.',
   'sessions.noFiles': 'Zurzeit ist keine Datei offen.',
+  'sessions.readAt': 'Gelesen um {when}',
   'sessions.filter': 'Nach Pfad oder Benutzer filtern',
   'sessions.user': 'Benutzer',
   'sessions.client': 'Rechner',
@@ -377,9 +378,26 @@ export const de = {
   'findings.area.sessions': 'Sitzungen',
   'findings.generatedAt': 'Gelesen am {when}',
   'findings.evidence': 'Grundlage',
-  'findings.unreadableHeading': 'Nicht angesehen',
+  'findings.unreadableHeading': 'Was nicht geprüft werden konnte',
+  'findings.todo': 'Zu tun:',
+  'findings.unreadable.capabilities_unreadable.do':
+    'Mit einem Konto anmelden, das diesen Server verwalten darf — die Prüfung selbst wurde abgelehnt, es ist also nichts einzustellen.',
+  'findings.unreadable.privilege_unconfirmed.do':
+    'Nichts. Die Änderung probieren — lehnt der Server ab, fehlt das Recht wirklich, und dann vergibt es auf dem Server: net rpc rights grant \'<Gruppe>\' SeDiskOperatorPrivilege -U <Admin>',
+  'findings.unreadable.registry_state_unknown.do':
+    'Auf dem Server nachsehen, ob die Registry-Konfiguration eingebunden ist: testparm -s | grep -i registry',
+  'findings.unreadable.server_facts_unreadable.do':
+    'Nichts Dringendes: diese Angaben sind Beiwerk, und alles andere hier funktioniert ohne sie. Ein Konto mit weitergehenden Rechten auf dem Server bekäme sie.',
+  'findings.unreadable.shares_unreadable.do':
+    'Die Liste kommt über srvsvc und braucht Verwaltungsrechte auf dem Server. Wird sie abgelehnt, hat dieses Konto sie nicht.',
+  'findings.unreadable.registry_unreadable.do':
+    'Zugriff auf HKLM\\Software\\Samba\\smbconf prüfen. Lesen darf ihn jedes Konto, das den Server verwalten darf; ohne ihn bleibt diese Konsole auf das beschränkt, was srvsvc meldet.',
+  'findings.unreadable.configuration_not_in_registry.do':
+    'Diese Freigabe steht in der Text-smb.conf, die SAMFSCON nicht liest. Sichtbar und änderbar wird sie erst, wenn sie in der Registry steht — das ist ein Eingriff in die Konfiguration des Servers (net conf import, dazu include = registry in der smb.conf) und nichts, was nebenbei passieren sollte.',
+  'findings.unreadable.sessions_unreadable.do':
+    'Auch diese Liste kommt über srvsvc und braucht Verwaltungsrechte auf dem Server.',
   'findings.unreadableWhy':
-    'Zu diesen Punkten steht unten nichts — nicht, weil nichts gefunden wurde, sondern weil niemand nachsehen konnte.',
+    'Der Bericht unten sagt zu diesen Punkten nichts — nicht, weil dort nichts wäre, sondern weil es sich von hier aus nicht lesen ließ. Bei jedem steht, was zu tun wäre.',
   'findings.coverage': '{readable} von {total} Freigaben mit lesbarer Konfiguration.',
   'findings.coverage.rest':
     'Die übrigen {count} stehen in der Text-smb.conf, die diese Konsole nicht liest — zu ihren Optionen sagt dieser Bericht nichts.',
@@ -575,6 +593,8 @@ export const de = {
     'Gespeichert. Ob es wirkt, ließ sich von hier aus nicht nachprüfen.',
 
   'config.notSetHere': 'hier nicht gesetzt',
+  'config.bool.yes': 'ja',
+  'config.bool.no': 'nein',
   'config.notSetHere.why':
     'Steht nicht in der Registry-Konfiguration. Ob die Text-smb.conf etwas setzt, sieht diese Konsole nicht.',
   'config.defaultIs': 'Ohne Eintrag gilt Sambas Vorgabe: {value}',
@@ -1077,6 +1097,7 @@ export const en: Record<MessageKey, string> = {
   'sessions.files': 'Open files',
   'sessions.nobody': 'Nobody is connected right now.',
   'sessions.noFiles': 'No file is open right now.',
+  'sessions.readAt': 'Read at {when}',
   'sessions.filter': 'Filter by path or user',
   'sessions.user': 'User',
   'sessions.client': 'Machine',
@@ -1229,9 +1250,26 @@ export const en: Record<MessageKey, string> = {
   'findings.area.sessions': 'Sessions',
   'findings.generatedAt': 'Read at {when}',
   'findings.evidence': 'Decided from',
-  'findings.unreadableHeading': 'Not looked at',
+  'findings.unreadableHeading': 'What could not be checked',
+  'findings.todo': 'To do:',
+  'findings.unreadable.capabilities_unreadable.do':
+    'Sign in with an account that may administer this server: the check itself was refused, so there is nothing to configure.',
+  'findings.unreadable.privilege_unconfirmed.do':
+    'Nothing. Try the change: if the server refuses, the right really is missing, and this grants it on the server: net rpc rights grant \'<group>\' SeDiskOperatorPrivilege -U <admin>',
+  'findings.unreadable.registry_state_unknown.do':
+    'Check on the server whether the registry configuration is included: testparm -s | grep -i registry',
+  'findings.unreadable.server_facts_unreadable.do':
+    'Nothing urgent: these details are incidental and everything else here works without them. An account with wider rights on the server would get them.',
+  'findings.unreadable.shares_unreadable.do':
+    'The list comes over srvsvc and needs administrative rights on the server. If it is refused, this account does not have them.',
+  'findings.unreadable.registry_unreadable.do':
+    'Check access to HKLM\\Software\\Samba\\smbconf. Any account that may administer the server may read it; without it this console is limited to what srvsvc reports.',
+  'findings.unreadable.configuration_not_in_registry.do':
+    'This share lives in the text smb.conf, which SAMFSCON does not read. It becomes visible and editable only once it is in the registry — which means changing how the server is configured (net conf import, plus include = registry in smb.conf) and is not something to do in passing.',
+  'findings.unreadable.sessions_unreadable.do':
+    'This list also comes over srvsvc and needs administrative rights on the server.',
   'findings.unreadableWhy':
-    'Nothing below speaks to these — not because nothing was found, but because nobody could look.',
+    'The report below says nothing about these — not because there is nothing there, but because it could not be read from here. Each one says what to do about it.',
   'findings.coverage': '{readable} of {total} shares have readable configuration.',
   'findings.coverage.rest':
     'The other {count} are in the text smb.conf, which this console does not read — this report says nothing about their options.',
@@ -1422,6 +1460,8 @@ export const en: Record<MessageKey, string> = {
   'config.verify.not_comparable': 'Saved. Whether it took effect could not be checked from here.',
 
   'config.notSetHere': 'not set here',
+  'config.bool.yes': 'yes',
+  'config.bool.no': 'no',
   'config.notSetHere.why':
     'Not in the registry configuration. Whether the text smb.conf sets it is something this console cannot see.',
   'config.defaultIs': 'With nothing set, Samba’s default applies: {value}',
