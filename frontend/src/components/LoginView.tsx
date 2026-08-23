@@ -182,12 +182,6 @@ export function LoginView() {
       <form className="login__card" onSubmit={submit}>
         <LogoLockup className="login__logo" />
 
-        <div className="login__language">
-          <button type="button" className="link" onClick={() => setLanguage(language === 'de' ? 'en' : 'de')}>
-            {language === 'de' ? 'EN' : 'DE'}
-          </button>
-        </div>
-
         {/* -- which server ------------------------------------------------ */}
 
         {servers && (servers.profiles.length > 0 || servers.default) && (
@@ -346,18 +340,31 @@ export function LoginView() {
           {pending ? t('login.signingIn') : t('login.submit')}
         </button>
 
-        {info && (
-          <p className="login__footer muted small">
-            {info.smb.min_protocol}
-            {info.smb.encrypt ? ` · ${t('session.encrypted')}` : ''}
-            {' · '}
-            {/* The licence and the source, before anybody signs in. AGPL §13
-                obliges a modified version offered over a network to offer its
-                source to the people using it — which includes the people
-                standing at the door. */}
-            <SourceNote version={info.version} />
-          </p>
-        )}
+        {/* The language, and what this build is. Both belong at the foot of
+            the card rather than in a corner: the switch is a full word here,
+            which "EN" in the top right was not — a two-letter code is only
+            legible to somebody who already knows what it does.
+
+            The minimum SMB dialect used to stand here. It said "SMB3" with
+            nothing to say what that was about, which is a fact about the
+            client's negotiation floor and not something anybody reads a
+            sign-in card for. It is in the README, where it can carry its
+            sentence.
+
+            The licence and the source before anybody signs in, because AGPL
+            §13 obliges a modified version offered over a network to offer its
+            source to the people using it — and that includes the people
+            standing at the door. */}
+        <div className="login__footer">
+          <button
+            type="button"
+            className="link"
+            onClick={() => setLanguage(language === 'de' ? 'en' : 'de')}
+          >
+            {language === 'de' ? 'English' : 'Deutsch'}
+          </button>
+          <SourceNote version={info?.version} />
+        </div>
       </form>
     </div>
   )

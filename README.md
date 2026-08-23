@@ -1,6 +1,10 @@
 <p align="center">
-  <img src="docs/brand/samfscon-lockup-dark.svg"
-       alt="SAMFSCON — the Samba FileServer console" width="420">
+  <picture>
+    <source media="(prefers-color-scheme: dark)"
+            srcset="docs/brand/samfscon-lockup-transparent-dark.svg">
+    <img src="docs/brand/samfscon-lockup-transparent-light.svg"
+         alt="SAMFSCON — the Samba FileServer console" width="420">
+  </picture>
 </p>
 
 <p align="center"><em><a href="README.de.md">Deutsche Fassung</a></em></p>

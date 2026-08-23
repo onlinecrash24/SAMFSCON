@@ -18,6 +18,13 @@
   /* Taken from the logo's accent stroke. Contrast against --surface is 5.4:1,
      and white on it is 5.4:1 — both clear WCAG AA. */
   --accent: #6a5cc0;
+
+  /* The mark's own two colours, taken from the brand files rather than
+     from the palette: the frame and the glyph are what it is recognised
+     by, and they are tuned per theme in docs/brand. The wordmark is not
+     here — it is currentColor, so it is whatever it is written on. */
+  --brand-frame: #9a9cae;
+  --brand-glyph: #6a5cc0;
   --accent-contrast: #ffffff;
   --danger: #b3261e;
   --warning: #8a5a00;
@@ -52,6 +59,9 @@
     --error-bg: #331b19;
     --selected: #2c2a45;
     --hover: #242634;
+
+    --brand-frame: #3a3d52;
+    --brand-glyph: #9184d9;
   }
 }
 
@@ -257,7 +267,14 @@ button:focus-visible {
   font-size: 0.9em;
 }
 .login__probe .row__label { flex: 0 0 45%; }
-.login__footer { display: flex; justify-content: space-between; margin-top: 16px; font-size: 0.85em; }
+.login__footer {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 16px;
+  font-size: 0.85em;
+}
 
 /* --------------------------------------------------------------------- */
 /* Console shell                                                         */
@@ -1036,8 +1053,6 @@ body.is-resizing { cursor: col-resize; user-select: none; }
 /* Sign-in --------------------------------------------------------------- */
 
 .login__logo { width: 100%; max-width: 320px; height: auto; margin-bottom: 18px; }
-.login__language { position: absolute; top: 12px; right: 14px; }
-.login__card { position: relative; }
 
 .login__row { display: flex; gap: 8px; }
 .login__row input { flex: 1; min-width: 0; }
