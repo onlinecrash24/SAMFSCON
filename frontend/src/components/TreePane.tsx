@@ -9,7 +9,8 @@
  * a list has nothing above it to draw a tree of. Those consoles declare
  * `panes.tree: false` and the shell never renders this at all. What is left is
  * the two that do have a hierarchy — local accounts, which divide into users
- * and groups, and the folder tree inside a share, which is not built yet.
+ * and groups, and the folders inside a share, which is a real tree and lives
+ * in its own component because it fetches.
  *
  * The server heading stays regardless. It is the one place that says which
  * machine is being changed, and on a screen with six consoles and several open
@@ -18,6 +19,7 @@
 
 import type { ServerSummary } from '../api/types'
 import type { SnapinId } from '../features/console/snapins'
+import { FolderTree } from '../features/files/FolderTree'
 import { useI18n } from '../i18n'
 import type { MessageKey } from '../i18n/messages'
 import { Icon } from './primitives'
@@ -51,11 +53,13 @@ export function TreePane({
   snapin,
   selected,
   onSelect,
+  onFolderContext,
 }: {
   server: ServerSummary
   snapin: SnapinId
   selected: string | null
   onSelect: (id: string) => void
+  onFolderContext: (share: string, path: string, at: { x: number; y: number }) => void
 }) {
   const { t } = useI18n()
   const branches = branchesFor(snapin)
@@ -72,6 +76,10 @@ export function TreePane({
         </div>
       </div>
 
+      {/* The one console whose tree is fetched rather than declared. */}
+      {snapin === 'files' ? (
+        <FolderTree selected={selected} onSelect={onSelect} onContext={onFolderContext} />
+      ) : (
       <ul className="tree__list">
         {branches.map((branch) => (
           <li key={branch.id}>
@@ -89,11 +97,12 @@ export function TreePane({
           </li>
         ))}
         {branches.length === 0 && (
-          // Reached only by a console that declares a tree and has nothing to
-          // put in it yet — the folder tree, which arrives with its console.
+          // A console that declares a tree and has nothing to put in it. None
+          // does today; the row exists so that the next one says something.
           <li className="tree__empty muted small">{t('tree.nothing')}</li>
         )}
       </ul>
+      )}
     </nav>
   )
 }

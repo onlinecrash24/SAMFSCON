@@ -19,7 +19,14 @@
  * one at a time.
  */
 
-import type { LocalAccount, LocalGroup, OpenFile, ServerSession, Share } from '../../api/types'
+import type {
+  DirectoryEntry,
+  LocalAccount,
+  LocalGroup,
+  OpenFile,
+  ServerSession,
+  Share,
+} from '../../api/types'
 import type { MenuNode } from '../../components/ContextMenu'
 
 /**
@@ -45,6 +52,9 @@ export type ActionId =
   | 'account.password'
   | 'account.delete'
   | 'group.properties'
+  | 'folder.new'
+  | 'folder.open'
+  | 'folder.properties'
 
 const SEPARATOR: MenuNode = 'separator'
 
@@ -129,6 +139,21 @@ export function localUserMenu(account: LocalAccount, { canWrite }: { canWrite: b
       : null,
     SEPARATOR,
     { id: 'account.properties', labelKey: 'action.properties' },
+  ])
+}
+
+export function fileMenu(entry: DirectoryEntry | null): MenuNode[] {
+  return tidy([
+    { id: 'refresh', labelKey: 'action.refresh' },
+    SEPARATOR,
+    // On the folder being listed, not on the row — which is why it is offered
+    // with nothing selected as well.
+    { id: 'folder.new', labelKey: 'files.newFolder' },
+    SEPARATOR,
+    entry?.is_directory ? { id: 'folder.open', labelKey: 'files.open' } : null,
+    // Permissions on a file as much as on a folder: an ACL that differs from
+    // its directory's is the thing this console exists to show.
+    entry ? { id: 'folder.properties', labelKey: 'share.group.filePermissions' } : null,
   ])
 }
 

@@ -341,6 +341,28 @@ export const de = {
 
 
   // -- local accounts ------------------------------------------------------
+  'files.selectOne': 'Einen Ordner im Baum auswählen.',
+  'files.created': 'Der Ordner {name} wurde angelegt.',
+  'files.newFolder': 'Neuer Ordner',
+  'files.newFolderIn': 'Wird angelegt in',
+  'files.create': 'Anlegen',
+  'files.open': 'Öffnen',
+  'files.name': 'Name',
+  'files.size': 'Größe',
+  'files.modified': 'Geändert',
+  'files.attributes': 'Attribute',
+  'files.readOnly': 'schreibgeschützt',
+  'files.hidden': 'versteckt',
+  'files.system': 'System',
+  'files.empty': 'Dieser Ordner ist leer.',
+  'files.noFolders': 'Keine Unterordner.',
+  'files.unreadable': 'Nicht lesbar mit diesem Konto.',
+  'files.truncated':
+    'Es werden nicht alle Einträge gezeigt — der Server bricht lange Auflistungen ab. Steigen Sie in einen Unterordner ab, um den Rest zu sehen.',
+  'files.inheritsPermissions':
+    'Der neue Ordner erbt die Rechte des übergeordneten, wie jedes über SMB angelegte Verzeichnis. Ändern lassen sie sich danach in seinen Eigenschaften.',
+  'files.nameForbidden': 'Diese Zeichen sind in einem Namen nicht erlaubt: \ / : * ? " < > |',
+  'share.root': 'Wurzel von {name}',
   'accounts.users': 'Benutzer',
   'accounts.groups': 'Gruppen',
   'accounts.new': 'Neues Konto',
@@ -848,6 +870,28 @@ export const en: Record<MessageKey, string> = {
   'error.missing_path': 'No name was given.',
 
 
+  'files.selectOne': 'Select a folder in the tree.',
+  'files.created': 'The folder {name} was created.',
+  'files.newFolder': 'New folder',
+  'files.newFolderIn': 'Will be created in',
+  'files.create': 'Create',
+  'files.open': 'Open',
+  'files.name': 'Name',
+  'files.size': 'Size',
+  'files.modified': 'Modified',
+  'files.attributes': 'Attributes',
+  'files.readOnly': 'read-only',
+  'files.hidden': 'hidden',
+  'files.system': 'system',
+  'files.empty': 'This folder is empty.',
+  'files.noFolders': 'No subfolders.',
+  'files.unreadable': 'Not readable with this account.',
+  'files.truncated':
+    'Not every entry is shown — the server stops a long listing. Step into a subfolder to see the rest.',
+  'files.inheritsPermissions':
+    'The new folder inherits the parent’s permissions, as any directory created over SMB does. They can be changed afterwards in its properties.',
+  'files.nameForbidden': 'These characters are not allowed in a name: \ / : * ? " < > |',
+  'share.root': 'Root of {name}',
   'accounts.users': 'Users',
   'accounts.groups': 'Groups',
   'accounts.new': 'New account',

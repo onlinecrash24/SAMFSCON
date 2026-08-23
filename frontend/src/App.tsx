@@ -2,7 +2,15 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { api } from './api/endpoints'
-import type { LocalAccount, LocalGroup, OpenFile, ServerSession, SessionInfo, Share } from './api/types'
+import type {
+  DirectoryEntry,
+  LocalAccount,
+  LocalGroup,
+  OpenFile,
+  ServerSession,
+  SessionInfo,
+  Share,
+} from './api/types'
 import { useContextMenu } from './components/ContextMenu'
 import { LoginView } from './components/LoginView'
 import { LogoMark } from './components/Logo'
@@ -15,6 +23,7 @@ import { AccountWindow } from './features/accounts/AccountWindow'
 import { AccountsView } from './features/accounts/AccountsView'
 import { ConsoleTabs } from './features/console/ConsoleTabs'
 import {
+  fileMenu,
   localGroupMenu,
   localUserMenu,
   openFileMenu,
@@ -23,6 +32,10 @@ import {
   type ActionId,
 } from './features/console/menuActions'
 import { SNAPINS, panesFor, snapinById, type SnapinId } from './features/console/snapins'
+import { FilesView } from './features/files/FilesView'
+import { FolderWindow } from './features/files/FolderWindow'
+import { NewFolderDialog } from './features/files/NewFolderDialog'
+import { childOf, decodeLocation, encodeLocation, type FileLocation } from './features/files/location'
 import { SessionsView } from './features/sessions/SessionsView'
 import { DeleteShareDialog } from './features/shares/DeleteShareDialog'
 import { ShareDetail, type ShareGroup } from './features/shares/ShareDetail'
@@ -90,9 +103,13 @@ function Console({ session }: { session: SessionInfo }) {
   const info = useQuery({ queryKey: ['info'], queryFn: () => api.info(), staleTime: Infinity })
   const [creating, setCreating] = useState(false)
   const [deletingShare, setDeletingShare] = useState<Share | null>(null)
+  const [creatingFolder, setCreatingFolder] = useState<FileLocation | null>(null)
 
   const snapin = location.snapin
   const selected = location.selected
+  // One field holds the selection for every console; for this one it packs a
+  // share and a path. See features/files/location.ts.
+  const here = snapin === 'files' ? decodeLocation(selected) : null
 
   useEffect(() => writeConsoleLocation(location), [location])
 
@@ -158,6 +175,19 @@ function Console({ session }: { session: SessionInfo }) {
   // sheet that already exists.
   const [shareTab, setShareTab] = useState<ShareGroup | undefined>(undefined)
 
+  const openFolder = useCallback(
+    (share: string, path: string) => {
+      windows.open({
+        snapin: 'files',
+        target: { kind: 'folder', share, path },
+        // The last segment, because a title bar has room for a name and not
+        // for a path. The path is in the sheet's own heading.
+        title: path ? (path.split('/').pop() ?? path) : share,
+      })
+    },
+    [windows],
+  )
+
   const runAction = useCallback(
     (id: ActionId, subject: unknown) => {
       switch (id) {
@@ -189,6 +219,15 @@ function Console({ session }: { session: SessionInfo }) {
             title: (subject as LocalAccount).name,
           })
           return
+        case 'folder.new':
+          if (here) setCreatingFolder(here)
+          return
+        case 'folder.open':
+          if (here) select(encodeLocation(here.share, (subject as DirectoryEntry).path))
+          return
+        case 'folder.properties':
+          if (here) openFolder(here.share, (subject as DirectoryEntry).path)
+          return
         case 'group.properties':
           windows.open({
             snapin: 'accounts',
@@ -204,7 +243,7 @@ function Console({ session }: { session: SessionInfo }) {
           return
       }
     },
-    [queryClient, openShare, windows, go],
+    [queryClient, openShare, openFolder, windows, go, select, here],
   )
 
   return (
@@ -249,6 +288,13 @@ function Console({ session }: { session: SessionInfo }) {
             snapin={snapin}
             selected={selected}
             onSelect={select}
+            onFolderContext={(share, path, at) =>
+              menu.open(at, fileMenu(null), (id) => {
+                if (id === 'folder.properties') openFolder(share, path)
+                else if (id === 'folder.new') setCreatingFolder({ share, path })
+                else runAction(id as ActionId, null)
+              })
+            }
           />
         </div>
         <Splitter boundary="tree" onCommit={(px) => setWidth('tree', px)} />
@@ -289,6 +335,16 @@ function Console({ session }: { session: SessionInfo }) {
                   : menu.open(at, openFileMenu(row as OpenFile), (id) =>
                       runAction(id as ActionId, row),
                     )
+              }
+            />
+          ) : snapin === 'files' ? (
+            <FilesView
+              location={here}
+              onOpen={(path) => here && select(encodeLocation(here.share, path))}
+              onProperties={(entry) => here && openFolder(here.share, entry.path)}
+              onCreate={() => here && setCreatingFolder(here)}
+              onContext={(entry, at) =>
+                menu.open(at, fileMenu(entry), (id) => runAction(id as ActionId, entry))
               }
             />
           ) : snapin === 'accounts' && standalone ? (
@@ -352,6 +408,21 @@ function Console({ session }: { session: SessionInfo }) {
         />
       )}
 
+      {creatingFolder && (
+        <NewFolderDialog
+          location={creatingFolder}
+          onClose={() => setCreatingFolder(null)}
+          onDone={(name) => {
+            const parent = creatingFolder
+            setCreatingFolder(null)
+            setNotice(t('files.created', { name }))
+            // Step into it: the reason for creating one here is to set its
+            // permissions, and that is the next thing anybody does.
+            select(encodeLocation(parent.share, childOf(parent, name)))
+          }}
+        />
+      )}
+
       {menu.menu}
 
       {/* An ordinary flex child, not a fixed strip: the panes are flex:1, so a
@@ -379,7 +450,14 @@ function Console({ session }: { session: SessionInfo }) {
               name={window.target.name}
               onAction={(id) => runAction(id as ActionId, { name: window.title })}
             />
-          ) : null
+          ) : (
+            <FolderWindow
+              share={window.target.share}
+              path={window.target.path}
+              canWrite={canWriteShares}
+              onChanged={setNotice}
+            />
+          )
         }
       />
     </div>

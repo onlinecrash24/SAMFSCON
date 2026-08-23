@@ -78,7 +78,7 @@ export const SNAPINS: Snapin[] = [
     id: 'files',
     label: 'snapin.files',
     icon: 'folder',
-    available: false,
+    available: true,
     note: 'snapin.files.note',
     // Share, then the folders inside it, loaded a level at a time. The
     // properties of a folder open in a window rather than a pane, because
