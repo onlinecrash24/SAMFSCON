@@ -34,6 +34,15 @@ def read(conn: ServerConnection, share: str) -> acl.SecurityDescriptor:
     A share with no descriptor at all is not an error and does not deserve an
     empty editor: it means "no restriction here", and the default is rendered
     so the editor opens on what the server actually enforces.
+
+    A descriptor that is *there* and could not be read is a different thing
+    entirely, and it used to be rendered as the same default — which is
+    "could not determine" reported as "is not restricted", in the widest
+    direction there is. Worse than a wrong screen: the editor writes back what
+    it shows, so saving any change would have replaced a real descriptor with
+    a fabricated Everyone-full-control that nobody ever saw.
+
+    It raises now, the way the file-level reader beside it already did.
     """
     try:
         info = conn.srvsvc.NetShareGetInfo(None, share, 502)
@@ -112,6 +121,10 @@ def _sddl_from(info: object) -> str | None:
     descriptor on others. Both are handled rather than one assumed, because
     which one it is depends on the Samba version rather than on anything this
     code can control.
+
+    Returns ``None`` for a share that carries no descriptor, and *raises* for
+    one that carries something this code could not read. Those two used to be
+    the same answer, and the caller turned both into Everyone-full-control.
     """
     buffer = getattr(info, "sd_buf", None)
     if buffer is None:
@@ -126,8 +139,12 @@ def _sddl_from(info: object) -> str | None:
     if callable(renderer):
         try:
             return renderer()
-        except Exception:  # fall through to the unpack attempt
-            logger.debug("the share descriptor would not render as SDDL", exc_info=True)
+        except Exception as exc:
+            # Not a fall-through any more. If it renders at all this is the
+            # call that renders it; a failure here is a descriptor we cannot
+            # read, and the unpack path below is for a different shape, not
+            # for a second attempt at this one.
+            raise _unreadable(exc) from exc
 
     if isinstance(descriptor, (bytes, bytearray)):
         try:
@@ -135,7 +152,24 @@ def _sddl_from(info: object) -> str | None:
             from samba.ndr import ndr_unpack
 
             return ndr_unpack(security.descriptor, bytes(descriptor)).as_sddl()
-        except Exception:  # a blob we cannot read is reported as absent
-            logger.debug("the share descriptor could not be unpacked", exc_info=True)
+        except Exception as exc:
+            raise _unreadable(exc) from exc
 
-    return None
+    # Neither renderable nor bytes: a shape nobody here anticipated. Reporting
+    # it as "no descriptor" would be inventing the most permissive answer out
+    # of not knowing.
+    raise _unreadable(TypeError(f"sd_buf carried a {type(descriptor).__name__}"))
+
+
+def _unreadable(cause: BaseException) -> SamfsconError:
+    return SamfsconError(
+        "The security descriptor could not be rendered.",
+        code="sddl_unrenderable",
+        detail=str(cause),
+        hint=(
+            "The share has one and this console could not read it. It is not "
+            "shown as unrestricted, because saving that would replace it. "
+            "`net rpc share getsecurity` on the server prints the same "
+            "descriptor in a form that can be compared."
+        ),
+    )

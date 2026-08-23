@@ -335,6 +335,8 @@ export const de = {
     'Kürzel wie DA oder DU sind in SDDL keine vollständigen SIDs, sondern eine Nummer relativ zu einer Domäne. Welche gemeint ist, war nicht zu erfahren — und geraten würde daraus ein gültiger SID, der zu niemandem gehört. Schreiben Sie den SID vollständig aus oder wählen Sie das Konto aus der Liste.',
   'error.unknown_preset': 'Unbekannte Berechtigungsstufe.',
   'error.sddl_unrenderable': 'Der Sicherheitsdeskriptor ließ sich nicht darstellen.',
+  'error.sddl_unrenderable.hint':
+    'Es gibt einen, und diese Konsole konnte ihn nicht lesen. Er wird nicht als unbeschränkt angezeigt, denn ein Speichern darauf würde ihn ersetzen. `net rpc share getsecurity <Freigabe>` auf dem Server gibt denselben Deskriptor in einer vergleichbaren Form aus.',
   'error.srvsvc_unsupported': 'Diese Samba-Version unterstützt den Aufruf nicht.',
   'error.path_escapes_share': 'Ein Pfad darf seine Freigabe nicht verlassen.',
   'error.missing_path': 'Es wurde kein Name angegeben.',
@@ -865,6 +867,8 @@ export const en: Record<MessageKey, string> = {
     'Aliases like DA or DU are not whole SIDs in SDDL — they are a number relative to a domain. Which domain could not be learned, and a guess would produce a valid SID belonging to nobody. Write the SID out in full, or pick the account from the list.',
   'error.unknown_preset': 'Unknown permission level.',
   'error.sddl_unrenderable': 'The security descriptor could not be rendered.',
+  'error.sddl_unrenderable.hint':
+    'There is one and this console could not read it. It is not shown as unrestricted, because saving on top of that would replace it. `net rpc share getsecurity <share>` on the server prints the same descriptor in a form that can be compared.',
   'error.srvsvc_unsupported': 'This Samba build does not support the call.',
   'error.path_escapes_share': 'A path may not step outside its share.',
   'error.missing_path': 'No name was given.',
