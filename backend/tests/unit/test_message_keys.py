@@ -20,12 +20,21 @@ import pytest
 
 from samfscon.srv import globalconf as g
 
+# Marked, and deselected when the suite runs inside the shipped image: that
+# image carries the built bundle and no frontend source, so there would be
+# nothing to read. CI runs these separately with the checkout mounted — see
+# .github/workflows/docker.yml. Deselecting is not the same as skipping: a run
+# that includes them and cannot find the file fails, loudly, below.
+pytestmark = pytest.mark.repo
+
 MESSAGES = Path(__file__).resolve().parents[3] / "frontend" / "src" / "i18n" / "messages.ts"
 
 
 def catalogue() -> str:
-    # Loudly, not skipped: this repository holds both halves, and "the front
-    # end was not there to check against" is not a reason to report a pass.
+    # Loudly, not skipped. Whether these tests run at all is decided by the
+    # marker, in one place, by whoever chose the command; deciding it here from
+    # a missing file would mean a run that was *meant* to check reported a pass
+    # after checking nothing.
     assert MESSAGES.is_file(), f"{MESSAGES} is missing"
     return MESSAGES.read_text(encoding="utf-8")
 

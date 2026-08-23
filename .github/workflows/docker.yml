@@ -58,7 +58,20 @@ jobs:
       # --entrypoint skips the container's start-up — certificate generation,
       # nginx templating, krb5.conf — none of which a test run needs.
       - name: Unit tests
-        run: docker run --rm --entrypoint python samfscon:test -m pytest tests/unit -q
+        run: docker run --rm --entrypoint python samfscon:test -m pytest tests/unit -q -m "not repo"
+
+      # The `repo` ones read the front end's message catalogue, to check that
+      # every code the backend can emit has a sentence in both languages. The
+      # image carries the built bundle and no source, so the checkout is
+      # mounted for this one run — read-only, and beside the suite rather than
+      # inside it, because what is being checked is that the two halves of the
+      # repository agree and not that the artefact is sound.
+      #
+      # Deselected above rather than skipped when the file is missing: a run
+      # that was meant to check must not report a pass having checked nothing.
+      - name: The two halves agree
+        run: |
+          docker run --rm --entrypoint python -v "${{ github.workspace }}/frontend:/opt/frontend:ro" samfscon:test -m pytest tests/unit -q -m repo
 
       # The frontend half. Run on the runner rather than in the image, because
       # the shipped image contains the built bundle and no node — building a

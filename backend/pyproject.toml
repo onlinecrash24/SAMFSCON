@@ -70,6 +70,11 @@ asyncio_mode = "auto"
 markers = [
     "integration: needs a live Samba file server (SAMFSCON_TARGET=test, see the README)",
     "shares: creates and deletes shares on the test server",
+    # Needs the repository working tree rather than the installed package. The
+    # shipped image carries the backend and the *built* bundle, so a check that
+    # reads frontend source has nothing to read there — and the suite has to
+    # stay runnable inside the image, which is where CI runs it.
+    "repo: needs the repository checkout, not just what ships",
 ]
 
 [tool.ruff]
