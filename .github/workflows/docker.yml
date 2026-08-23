@@ -60,6 +60,41 @@ jobs:
       - name: Unit tests
         run: docker run --rm --entrypoint python samfscon:test -m pytest tests/unit -q
 
+      # The frontend half. Run on the runner rather than in the image, because
+      # the shipped image contains the built bundle and no node — building a
+      # second image just to run these would cost more than it proves.
+      #
+      # Node environment, no DOM: what is tested is the logic the screens share
+      # and the validation of anything read back out of browser storage. Layout,
+      # pointer and stacking behaviour are checked in a real browser, because a
+      # stand-in DOM reports zeros for every measurement and the tests would
+      # only be asserting against the stand-in.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Frontend unit tests
+        run: npm ci --prefix frontend && npm run test --prefix frontend
+
+      # The opposite of the step above: this one runs the start-up and nothing
+      # else. `nginx -t` as the command means the entrypoint does its whole job
+      # first — certificate, krb5.conf, the real-ip snippet, the templating —
+      # and nginx then judges the result. A template that no longer parses is
+      # not something a python test can see, and it reaches a running container
+      # as a service that will not start.
+      - name: The rendered nginx configuration parses
+        run: |
+          docker run --rm samfscon:test nginx -t -c /etc/samfscon/nginx.conf
+
+      # Again with a proxy named, because that path emits directives the empty
+      # one does not — including an include whose file only exists if the
+      # entrypoint wrote it.
+      - name: ... and still parses with a trusted proxy configured
+        run: |
+          docker run --rm -e SAMFSCON_TRUSTED_PROXIES='10.0.0.0/8, 192.168.1.2'             samfscon:test nginx -t -c /etc/samfscon/nginx.conf
+
   lint:
     name: Lint
     runs-on: ubuntu-latest
@@ -73,11 +108,40 @@ jobs:
       # Ruff needs none of the Samba bindings, so it runs here rather than in
       # the image — seconds instead of a container build.
       - name: Install ruff
-        run: pip install "ruff>=0.5"
+        run: pip install "ruff>=0.5" pip-audit
 
       - name: Check
         working-directory: backend
         run: ruff check samfscon tests
+
+      # scripts/ sits outside backend/ and would otherwise go unlinted. The
+      # config has to be named: ruff looks *upward* from the files it is given,
+      # and from the repository root there is nothing above it to find.
+      - name: Check the scripts
+        run: ruff check --config backend/pyproject.toml scripts
+
+      # The version is stated in one file. This is what stops the others
+      # drifting from it — and on a tag build, what catches a tag pushed
+      # without raising anything at all.
+      - name: The version agrees with itself
+        env:
+          EXPECTED_TAG: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
+        run: python scripts/check_versions.py
+
+      # What a build gets today.
+      - name: Audit the dependencies as declared
+        run: |
+          python scripts/dependency_requirements.py > /tmp/declared.txt
+          pip-audit --strict -r /tmp/declared.txt
+
+      # And what the constraints still permit. This is the one nothing else
+      # asks: `>=` resolves to the newest release, so a fresh build is never
+      # exposed by a floor that is too low — the machine that installed months
+      # ago is, and so is anyone who pins from these constraints.
+      - name: Audit the floors
+        run: |
+          python scripts/dependency_requirements.py --floors > /tmp/floors.txt
+          pip-audit --strict -r /tmp/floors.txt
 
   publish:
     name: Publish to ghcr.io
