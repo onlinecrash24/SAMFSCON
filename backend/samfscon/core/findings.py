@@ -116,6 +116,7 @@ IDS: tuple[str, ...] = (
     "share_path_duplicate",
     "share_path_sensitive",
     "share_configured_not_served",
+    "share_root_not_writable",
     "guest_session_present",
 )
 
@@ -183,6 +184,10 @@ def evaluate(
     transport: dict[str, Any] | None = None,
     shares: list[dict[str, Any]] | None = None,
     sessions: list[dict[str, Any]] | None = None,
+    #: What this session may create in each share's root, as the *server*
+    #: answered it. Keyed by share name; a value of None means the question
+    #: could not be put and no finding follows from it.
+    roots: dict[str, bool | None] | None = None,
 ) -> list[Finding]:
     """Every finding these inputs support, worst first.
 
@@ -205,6 +210,8 @@ def evaluate(
         found.extend(_shares(shares, registry, suppress_not_served=suppressed))
     if sessions is not None:
         found.extend(_sessions(sessions))
+    if roots:
+        found.extend(_roots(roots))
 
     order = {name: index for index, name in enumerate(SEVERITIES)}
     # Three parts, not two. Severity still wins, because the report is
@@ -460,6 +467,42 @@ def _shares(
     found.extend(_share_paths(entries))
     if not suppress_not_served:
         found.extend(_configured_not_served(entries, registry))
+    return found
+
+
+def _roots(roots: dict[str, bool | None]) -> list[Finding]:
+    """Shares whose own directory refuses this account.
+
+    The share exists, the registry key is right, and nothing can be put in it.
+    That combination produces no other finding on this page — every rule above
+    reads configuration, and this one is about the file system underneath it,
+    which is the half a console managing shares over the network does not own.
+
+    Only a decided ``False`` becomes a finding. ``None`` is the probe saying it
+    could not ask, and a report that turned that into "you cannot write here"
+    would be inventing the very kind of fault it exists to find.
+    """
+    found: list[Finding] = []
+    for name in sorted(roots):
+        if roots[name] is not True and roots[name] is not None:
+            found.append(
+                Finding(
+                    id="share_root_not_writable",
+                    severity="medium",
+                    area="shares",
+                    subject=name,
+                    evidence={
+                        # Named so the finding can be checked: this is what the
+                        # server answered to an open for add-file and
+                        # add-subdirectory, not something worked out from the
+                        # entries naming this account.
+                        "asked": "create a file or folder in the share root",
+                        "answer": "refused",
+                        "asked_of": "the server, by opening a handle",
+                        "account_groups_included": True,
+                    },
+                )
+            )
     return found
 
 

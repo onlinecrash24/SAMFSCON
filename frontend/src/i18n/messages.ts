@@ -142,6 +142,10 @@ export const de = {
   'share.new': 'Neue Freigabe',
   'share.create': 'Anlegen',
   'share.delete': 'Freigabe löschen',
+  'share.created.title': 'Freigabe angelegt',
+  'share.rootNotWritable': 'In dieser Freigabe kann dieses Konto nichts anlegen.',
+  'share.rootNotWritable.why':
+    'Die Freigabe steht. Das Verzeichnis dahinter gehört aber jemand anderem und lässt dieses Konto nicht schreiben — das entscheiden Besitzer und ACL im Dateisystem, nicht die Freigabe. Nachsehen auf dem Reiter Dateirechte; ändern lässt es sich von hier nur mit dem Recht, die Berechtigungen zu ändern, sonst auf dem Server. Gefragt wurde der Server selbst, mit allen Gruppen dieses Kontos.',
   'share.created': 'Die Freigabe {name} wurde angelegt.',
   'share.deleteConfirm': 'Freigabe löschen',
   'share.deleteWarning':
@@ -284,6 +288,11 @@ export const de = {
   'perm.inherited.why':
     'Dieser Eintrag kommt aus dem übergeordneten Verzeichnis. Ihn hier zu ändern würde die Vererbung aufbrechen — geändert wird er dort, wo er herkommt.',
   'perm.remove': 'Entfernen',
+  'perm.cannotChange': 'Dieses Konto darf die Berechtigungen hier nicht ändern.',
+  'perm.cannotChange.why':
+    'Dafür braucht es das Recht, die Berechtigungen zu ändern — das hat der Besitzer, oder wem es ausdrücklich eingeräumt wurde. Den Besitz zu übernehmen verschafft es: das ist eine eigene Berechtigung, die dieses Konto haben kann, auch wenn ihm die erste fehlt. Geändert wird dabei nur der Besitzer, sonst nichts.',
+  'perm.takeOwnership': 'Besitz übernehmen',
+  'perm.tookOwnership': 'Der Besitz liegt jetzt bei diesem Konto.',
   'perm.add': 'Eintrag hinzufügen',
   'perm.protected': 'Vererbung vom übergeordneten Verzeichnis unterbrechen',
   'perm.protected.hint':
@@ -442,6 +451,13 @@ export const de = {
     'Diese Freigabe erlaubt Gastzugriff',
   'findings.share_guest_ok.why':
     '`guest ok = yes` lässt Zugriff ohne Anmeldung zu, abgebildet auf das Gastkonto. Ob dabei geschrieben werden darf, steht in dieser Freigabe nicht — es kann global gesetzt sein, und diese Datei liest die Konsole nicht.',
+  'findings.share_root_not_writable': 'In dieser Freigabe kann dieses Konto nichts anlegen',
+  'findings.share_root_not_writable.why':
+    'Die Freigabe steht, ihr Registry-Eintrag ist in Ordnung — das Verzeichnis dahinter lässt dieses Konto aber nicht schreiben. Das entscheiden Besitzer und ACL im Dateisystem, nicht die Freigabe: nachzusehen auf dem Reiter Dateirechte, zu ändern dort nur mit Schreibrecht auf den Berechtigungen. Gefragt wurde der Server selbst, mit allen Gruppen dieses Kontos.',
+  'findings.unreadable.too_many_shares_to_probe':
+    'Nicht jede Freigabe wurde geöffnet — dieser Server hat mehr, als ein Bericht nacheinander anfassen sollte.',
+  'findings.unreadable.too_many_shares_to_probe.do':
+    'Nichts. Die übrigen sind nicht auffällig, sondern ungeprüft; wer eine bestimmte wissen will, öffnet sie in Ordner und Dateien.',
   'findings.share_guest_writable':
     'Diese Freigabe erlaubt Gästen zu schreiben',
   'findings.share_guest_writable.why':
@@ -749,6 +765,10 @@ export const de = {
   'error.kerberos_needs_a_name': 'Kerberos braucht den Namen des Servers, bekannt ist nur seine Adresse.',
   'error.kerberos_needs_a_name.hint':
     'Den Namen des Servers statt seiner Adresse eintragen — oder SAMFSCON ihn lernen lassen: er kommt aus einer unauthentifizierten Policy-Abfrage, die dieser Server abgelehnt hat. Welcher Name auch benutzt wird, der Container muss ihn auflösen können; notfalls über extra_hosts.',
+  'error.own_sid_unknown': 'Der Server hat nicht gesagt, welches Konto diese Sitzung ist.',
+  'error.own_sid_unknown.hint':
+    'Den Besitz zu übernehmen braucht die Kennung, die der Server für diese Sitzung aufgelöst hat — und genau diese Abfrage wurde abgelehnt.',
+  'error.unknown_probe': 'Unbekannte Zugriffsfrage.',
   'error.hint': 'Hinweis',
   'error.details': 'Technische Einzelheiten',
   'error.network_error': 'Der Server ist nicht erreichbar.',
@@ -1018,6 +1038,10 @@ export const en: Record<MessageKey, string> = {
   'share.new': 'New share',
   'share.create': 'Create',
   'share.delete': 'Delete share',
+  'share.created.title': 'Share created',
+  'share.rootNotWritable': 'This account cannot create anything in this share.',
+  'share.rootNotWritable.why':
+    'The share is there. The directory behind it belongs to somebody else and does not let this account write — that is decided by the owner and the ACL in the file system, not by the share. Look on the File rights tab; changing it from here needs permission to change the permissions, otherwise it happens on the server. The server itself was asked, with every group this account is in.',
   'share.created': 'The share {name} was created.',
   'share.deleteConfirm': 'Delete the share',
   'share.deleteWarning':
@@ -1157,6 +1181,11 @@ export const en: Record<MessageKey, string> = {
   'perm.inherited.why':
     'This entry comes from the parent directory. Changing it here would break the inheritance it came from — it is changed where it originates.',
   'perm.remove': 'Remove',
+  'perm.cannotChange': 'This account may not change the permissions here.',
+  'perm.cannotChange.why':
+    'That needs permission to change the permissions, which the owner has and anyone granted it explicitly. Taking ownership obtains it: that is a separate permission an account can hold even when it lacks the first. Nothing but the owner changes.',
+  'perm.takeOwnership': 'Take ownership',
+  'perm.tookOwnership': 'This account now owns it.',
   'perm.add': 'Add an entry',
   'perm.protected': 'Stop inheriting from the parent directory',
   'perm.protected.hint':
@@ -1315,6 +1344,13 @@ export const en: Record<MessageKey, string> = {
     'This share allows guest access',
   'findings.share_guest_ok.why':
     '`guest ok = yes` permits access without signing in, mapped to the guest account. Whether writing is allowed with it is not stated in this share — it can be set globally, and this console reads no file.',
+  'findings.share_root_not_writable': 'This account cannot create anything in this share',
+  'findings.share_root_not_writable.why':
+    'The share is there and its registry key is fine — the directory behind it does not let this account write. That is decided by the owner and the ACL in the file system, not by the share: look on the File rights tab, and changing it there needs permission to change the permissions. The server itself was asked, with every group this account is in.',
+  'findings.unreadable.too_many_shares_to_probe':
+    'Not every share was opened — this server has more than one report should touch one after another.',
+  'findings.unreadable.too_many_shares_to_probe.do':
+    'Nothing. The rest are not clean, they are unchecked; to know about one in particular, open it under Folders and files.',
   'findings.share_guest_writable':
     'Guests may write to this share',
   'findings.share_guest_writable.why':
@@ -1617,6 +1653,10 @@ export const en: Record<MessageKey, string> = {
   'error.kerberos_needs_a_name': 'Kerberos needs the server’s name, and only its address is known.',
   'error.kerberos_needs_a_name.hint':
     'Enter the server’s name instead of its address, or let SAMFSCON learn it: the name comes from an unauthenticated policy query that this server refused. Whichever name is used, the container has to be able to resolve it — add it to extra_hosts if DNS does not.',
+  'error.own_sid_unknown': 'The server did not say which account this session is.',
+  'error.own_sid_unknown.hint':
+    'Taking ownership needs the SID the server resolved for this session, and that is the lookup that was refused.',
+  'error.unknown_probe': 'Unknown access question.',
   'error.hint': 'Hint',
   'error.details': 'Technical detail',
   'error.network_error': 'The server could not be reached.',

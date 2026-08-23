@@ -22,6 +22,7 @@ from fastapi import APIRouter
 
 from samfscon.api.common import Audit, PathQuery, ShareQuery
 from samfscon.auth.deps import CurrentSession, VerifiedSession, VerifiedWorker, Worker
+from samfscon.core.errors import SamfsconError
 from samfscon.schemas.requests import SecurityDescriptorRequest
 from samfscon.srv import acl, files, identity, shareacl
 from samfscon.srv.access import srv_read, srv_write
@@ -135,6 +136,93 @@ async def set_path_permissions(
         record["sddl"] = change
 
     return {"share": share, "path": path, "status": "saved"}
+
+
+@router.get("/access")
+async def own_access(
+    share: ShareQuery, session: CurrentSession, worker: Worker, path: PathQuery = ""
+) -> dict[str, Any]:
+    """What this session may actually do here, asked of the server.
+
+    Not computed. :func:`acl.effective_access` next door reads the entries that
+    name one SID and says so — it knows nothing about the groups that SID is
+    in, so on a directory whose only entry is for Domain Admins it answers "no
+    access" to a member of Domain Admins. A warning built on that arithmetic
+    would invent permission problems on perfectly good shares.
+
+    Each answer is three-valued. ``null`` means the question could not be put,
+    which is not the same as "may not" and must not be shown as if it were.
+    """
+
+    def _read(conn: ServerConnection) -> dict[str, Any]:
+        relative = files.normalise(path)
+        return {
+            "share": share,
+            "path": relative,
+            "may_create": acl.probe_access(conn, share, relative, acl.PROBE_CREATE),
+            "may_change_permissions": acl.probe_access(
+                conn, share, relative, acl.PROBE_CHANGE_PERMISSIONS
+            ),
+            # Asked separately, and that is the point: an account refused the
+            # permissions may still be allowed to take the ownership that grants
+            # them. Windows offers exactly this way out of exactly this corner.
+            "may_take_ownership": acl.probe_access(
+                conn, share, relative, acl.PROBE_TAKE_OWNERSHIP
+            ),
+        }
+
+    return await srv_read(worker, session, _read, label="permissions.access")
+
+
+@router.post("/owner")
+async def take_ownership(
+    share: ShareQuery,
+    session: VerifiedSession,
+    worker: VerifiedWorker,
+    audit: Audit,
+    path: PathQuery = "",
+) -> dict[str, Any]:
+    """Make the signed-in account the owner of one path.
+
+    Only the owner is written, which is the whole reason this is not part of
+    the descriptor write: that one sends owner, group and DACL together and
+    therefore needs WRITE_DAC — the very right somebody is here to obtain.
+
+    The new owner is never a parameter. Taking ownership is a thing an account
+    does to itself with a privilege it holds; handing somebody else a server
+    they cannot otherwise reach is a different operation, and offering it here
+    would be offering it by accident.
+    """
+
+    def _write(conn: ServerConnection) -> dict[str, Any]:
+        relative = files.normalise(path)
+        account = identity.current_account(conn)
+        sid = account.get("sid")
+        if not sid:
+            raise SamfsconError(
+                "The server did not say which account this session is.",
+                code="own_sid_unknown",
+                hint=(
+                    "Taking ownership needs the SID the server resolved for this "
+                    "session, and the lookup that answers it was refused."
+                ),
+            )
+        before = None
+        try:
+            before = acl.parse(acl.read_path_sddl(conn, share, relative)).owner
+        except SamfsconError:
+            # Worth having in the trail and never worth failing for: this runs
+            # precisely when the descriptor is hard to get at.
+            logger.debug("the previous owner could not be read", exc_info=True)
+
+        acl.take_ownership(conn, share, relative, str(sid))
+        return {"old": before, "new": str(sid), "account": account.get("name")}
+
+    with audit.operation("permissions.takeOwnership", target=rf"{share}\{path}") as record:
+        change = await srv_write(worker, session, _write, label="permissions.takeOwnership")
+        record["changes"]["owner"] = change
+
+    return {"share": share, "path": path, "status": "saved", "owner": change}
 
 
 @router.get("/effective")

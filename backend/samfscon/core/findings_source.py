@@ -51,6 +51,7 @@ def collect(conn: ServerConnection) -> dict[str, Any]:
     facts = _facts(conn, unreadable)
     shares, registry = _shares(conn, unreadable)
     sessions = _sessions(conn, unreadable)
+    roots = _roots(conn, shares, unreadable)
 
     found = findings.evaluate(
         capabilities=capabilities,
@@ -59,6 +60,7 @@ def collect(conn: ServerConnection) -> dict[str, Any]:
         transport=transport,
         shares=shares,
         sessions=sessions,
+        roots=roots,
     )
 
     if shares is not None:
@@ -70,7 +72,7 @@ def collect(conn: ServerConnection) -> dict[str, Any]:
         "generated_at": datetime.now(UTC).isoformat(timespec="seconds"),
         "findings": [item.describe() for item in found],
         "unreadable": [item.describe() for item in unreadable],
-        "coverage": _coverage(shares),
+        "coverage": _coverage(shares, roots),
         # What the findings were decided from, so any of them can be checked.
         "server": server,
         "transport": transport,
@@ -229,21 +231,72 @@ def _sessions(
         return None
 
 
-def _coverage(shares: list[dict[str, Any]] | None) -> dict[str, Any]:
+#: How many shares one report will open a handle on. A server with two hundred
+#: shares would otherwise make two hundred SMB connections for one page. What
+#: was left out is reported rather than quietly dropped — a coverage number
+#: that silently stopped counting is the thing this whole block exists against.
+MAX_ROOT_PROBES = 40
+
+
+def _roots(
+    conn: ServerConnection,
+    shares: list[dict[str, Any]] | None,
+    unreadable: list[findings.Unreadable],
+) -> dict[str, bool | None] | None:
+    """Whether this session may create anything in each share's root.
+
+    Asked of the server, one open per share, because the arithmetic that could
+    answer it locally cannot see group membership: on a share whose only entry
+    is for Domain Admins it would tell a member of Domain Admins they have no
+    access. A finding built on that would be wrong on exactly the shares that
+    are set up properly.
+    """
+    from samfscon.srv import acl
+
+    if shares is None:
+        return None
+
+    answers: dict[str, bool | None] = {}
+    for entry in shares[:MAX_ROOT_PROBES]:
+        name = str(entry.get("name") or "")
+        if not name:
+            continue
+        try:
+            answers[name] = acl.probe_access(conn, name, "", acl.PROBE_CREATE)
+        except Exception:
+            logger.debug("the root of %s could not be probed", name, exc_info=True)
+            answers[name] = None
+
+    dropped = max(0, len(shares) - MAX_ROOT_PROBES)
+    if dropped:
+        unreadable.append(findings.Unreadable("shares", "", "too_many_shares_to_probe"))
+    return answers
+
+
+def _coverage(
+    shares: list[dict[str, Any]] | None, roots: dict[str, bool | None] | None
+) -> dict[str, Any]:
     """How much of the server the findings speak for.
 
-    ``shares_probed`` is zero and says so rather than being left out. Nothing
-    in this version connects to a share, so the report is silent about whether
-    any of them can be opened — and silence on a screen reads as "all fine".
-    The number is what stops it.
+    ``shares_probed`` counts the ones whose root gave a decided answer — not
+    the ones an open was attempted on. A share that could not be asked is not
+    covered, and counting it would make the number say more than it knows.
     """
     counts = findings.coverage(shares or [])
+    decided = [name for name, answer in (roots or {}).items() if answer is not None]
     counts.update(
         {
-            "shares_probed": 0,
+            "shares_probed": len(decided),
             "shares_with_permissions_read": 0,
-            # Why those are zero: not refused, not empty — not attempted.
-            "connectivity_examined": False,
+            # True only when at least one share gave a decided answer.
+            # Attempting and learning nothing is not examining: the flag is
+            # what suppresses "nothing was probed" on the screen, and it must
+            # not be suppressed by a round of questions that all went
+            # unanswered.
+            "connectivity_examined": bool(decided),
+            # Still zero and still says why: nothing here reads a share's own
+            # descriptor, so the report is silent about how file rights stand
+            # against share rights — and silence on a screen reads as "fine".
             "permissions_examined": False,
         }
     )

@@ -9,6 +9,7 @@ Checking here is what lets the answer say which one, and what command fixes it.
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from fastapi import APIRouter
@@ -16,10 +17,11 @@ from fastapi import APIRouter
 from samfscon.api.common import Audit, LanguageQuery, SharePath
 from samfscon.auth.deps import CurrentSession, VerifiedSession, VerifiedWorker, Worker
 from samfscon.schemas.requests import ShareCreateRequest, ShareUpdateRequest
-from samfscon.srv import diagnostics, shareconf, shares
+from samfscon.srv import acl, diagnostics, shareconf, shares
 from samfscon.srv.access import srv_read, srv_write
 from samfscon.srv.connection import ServerConnection
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/shares", tags=["shares"])
 
 
@@ -106,6 +108,22 @@ async def create_share(
         result = await srv_write(worker, session, _write, label="shares.create")
         record["path"] = payload.path
         record["options"] = result.get("options")
+
+    # A share is a registry key; the directory it points at is not, and its
+    # permissions were decided by whoever created it on the server. A console
+    # that wrote the key and said nothing would leave somebody with a share
+    # they cannot put anything in and no idea why. Asked of the server rather
+    # than worked out, and in its own try: a probe that failed must not turn a
+    # share that was created into a request that looks like it failed.
+    def _probe(conn: ServerConnection) -> bool | None:
+        return acl.probe_access(conn, payload.name, "", acl.PROBE_CREATE)
+
+    try:
+        result["root_writable"] = await srv_read(worker, session, _probe, label="shares.probe")
+    except Exception:
+        logger.debug("the new share's root could not be probed", exc_info=True)
+        # None, never False: "we could not ask" is not "you may not".
+        result["root_writable"] = None
 
     return result
 

@@ -132,6 +132,16 @@ SE_DACL_PROTECTED = 0x1000
 # through the full_audit VFS module on a Samba server, not through the SACL,
 # and sending SECINFO_SACL asks for a privilege most accounts do not have —
 # turning an ordinary permission change into an access-denied for no gain.
+# SMB2 CREATE, the fields the access probe pins (MS-SMB2 2.2.13). Written out
+# here rather than imported, like everything else on this page: it is what lets
+# the probe be tested on a machine with no Samba bindings at all.
+FILE_OPEN = 1  # open what is there; never create it
+FILE_DIRECTORY_FILE = 0x00000001  # and only if it is a directory
+# Share everything: the probe asks whether it *may* open the directory, and
+# refusing to share it with whoever else has it open would turn somebody else's
+# handle into this account's permission problem.
+FILE_SHARE_ALL = 0x00000001 | 0x00000002 | 0x00000004
+
 SECINFO_OWNER = 0x00000001
 SECINFO_GROUP = 0x00000002
 SECINFO_DACL = 0x00000004
@@ -682,6 +692,127 @@ def read_path_sddl(conn: ServerConnection, share: str, path: str) -> str:
             code="sddl_unrenderable",
             detail=str(exc),
         ) from exc
+
+
+# The three questions this console asks about a directory, as access masks.
+# Asked of the *server* rather than worked out here, because working them out
+# is what effective_access does and effective_access is honestly partial: it
+# reads the entries that name one SID and knows nothing about the groups that
+# SID is in. On a share whose only entry is for Domain Admins that arithmetic
+# says "no access" to a member of Domain Admins, which is a wrong answer with a
+# confident face. Opening a handle makes the server evaluate the whole token.
+PROBE_CREATE = "create"
+PROBE_CHANGE_PERMISSIONS = "change_permissions"
+PROBE_TAKE_OWNERSHIP = "take_ownership"
+
+
+def probe_access(conn: ServerConnection, share: str, path: str, question: str) -> bool | None:
+    """Whether this session may do one thing here, asked of the server.
+
+    Three answers and the third earns its place. ``True`` and ``False`` are the
+    server's, from opening a handle with the access it would need and nothing
+    else — no file is created, nothing is changed, and the handle is closed
+    again. ``None`` means the question could not be put: an old binding whose
+    ``create`` takes different keywords, or a failure that is not a refusal.
+    Reporting that as ``False`` would be this console inventing a permission
+    problem out of its own inability to look.
+    """
+    masks = {
+        # On a directory these two bits are named add-file and
+        # add-subdirectory; they are the same numbers that mean write-data and
+        # append-data on a file (MS-DTYP 2.4.3). Creating a folder needs both,
+        # and asking for one would answer a narrower question than the button
+        # that follows offers.
+        PROBE_CREATE: FILE_WRITE_DATA | FILE_APPEND_DATA,
+        PROBE_CHANGE_PERMISSIONS: WRITE_DAC,
+        PROBE_TAKE_OWNERSHIP: WRITE_OWNER,
+    }
+    wanted = masks.get(question)
+    if wanted is None:
+        raise InvalidRequest(
+            "Unknown access question.",
+            code="unknown_probe",
+            context={"question": question, "allowed": sorted(masks)},
+        )
+
+    try:
+        tree = conn.tree(share)
+    except Exception:
+        logger.debug("the share could not be opened for a probe", exc_info=True)
+        return None
+
+    relative = path or ""
+    # FILE_OPEN: open what is there, never create it. FILE_DIRECTORY_FILE: and
+    # only if it is a directory, so a name that turned into a file answers the
+    # question about a directory with a refusal rather than a surprise.
+    attempts = (
+        lambda: tree.create(
+            relative,
+            DesiredAccess=wanted,
+            ShareAccess=FILE_SHARE_ALL,
+            CreateDisposition=FILE_OPEN,
+            CreateOptions=FILE_DIRECTORY_FILE,
+        ),
+        # Older bindings without the keywords. Positional order is the one
+        # Samba's own tests use; a build that does not match raises TypeError
+        # and the answer becomes "could not ask" rather than a wrong bool.
+        lambda: tree.create(relative, 0, wanted),
+    )
+
+    for attempt in attempts:
+        try:
+            handle = attempt()
+        except TypeError:
+            continue
+        except Exception as exc:
+            translated = translate_access(exc)
+            if translated is None:
+                logger.debug("the access probe failed for a reason that is not a refusal",
+                             exc_info=True)
+                return None
+            return translated
+        try:
+            tree.close(handle)
+        except Exception:  # the answer is already in hand
+            logger.debug("the probe handle could not be closed", exc_info=True)
+        return True
+
+    return None
+
+
+def translate_access(exc: BaseException) -> bool | None:
+    """False for a refusal, None for anything else.
+
+    The distinction is the whole point of the probe. "The server said no" and
+    "the question did not get through" are different facts, and only the first
+    one is about permissions.
+    """
+    from samfscon.core.errors import PermissionDenied, translate
+
+    try:
+        translated = translate(exc)
+    except Exception:  # noqa: BLE001 — translate is total; never fail on the way out
+        return None
+    return False if isinstance(translated, PermissionDenied) else None
+
+
+def take_ownership(conn: ServerConnection, share: str, path: str, sid: str) -> None:
+    """Make *sid* the owner of one path, and change nothing else.
+
+    Only SECINFO_OWNER goes to the server, and that is the point: writing the
+    descriptor the ordinary way asks for WRITE_DAC as well, which is exactly
+    the right this is meant to obtain. A caller who cannot change the
+    permissions can still take the ownership that lets them.
+    """
+    from samfscon.core.errors import translate
+
+    tree = conn.tree(share)
+    descriptor = to_descriptor(conn, f"O:{sid}")
+
+    try:
+        tree.set_acl(path or "", descriptor, SECINFO_OWNER)
+    except Exception as exc:
+        raise translate(exc) from exc
 
 
 def write_path_sddl(

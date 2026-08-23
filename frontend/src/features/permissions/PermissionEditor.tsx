@@ -58,6 +58,27 @@ export function PermissionEditor({
       level === 'share' ? api.sharePermissions(share) : api.pathPermissions(share, path ?? ''),
   })
 
+  // What this session may do here, asked of the server. Only at file level:
+  // the share descriptor lives in the registry and is governed by the registry
+  // rights the capabilities already report, not by a handle on a directory.
+  const access = useQuery({
+    queryKey: ['ownAccess', share, path ?? ''],
+    queryFn: () => api.ownAccess(share, path ?? ''),
+    enabled: level === 'file',
+  })
+
+  // Windows' way out of exactly this corner, and the reason the two questions
+  // are asked separately: an account refused the permissions may still be
+  // allowed to take the ownership that grants them.
+  const claim = useMutation({
+    mutationFn: () => api.takeOwnership(share, path ?? ''),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: key })
+      void queryClient.invalidateQueries({ queryKey: ['ownAccess', share, path ?? ''] })
+      onChanged(t('perm.tookOwnership'))
+    },
+  })
+
   const [aces, setAces] = useState<Ace[]>([])
   const [protectedDacl, setProtectedDacl] = useState(false)
   const [adding, setAdding] = useState(false)
@@ -272,6 +293,30 @@ export function PermissionEditor({
           <span className="field__hint">{t('perm.protected.hint')}</span>
         </label>
       )}
+
+      {/* Only on a confirmed refusal, and only when taking ownership was not
+          itself refused. `null` on either side means the server could not be
+          asked, and a button offered on that basis would fail for a reason
+          nobody could have predicted from the screen. */}
+      {access.data?.may_change_permissions === false &&
+        access.data.may_take_ownership !== false && (
+          <div className="alert alert--warning">
+            <div className="alert__body">
+              <strong>{t('perm.cannotChange')}</strong>
+              <p className="alert__hint">{t('perm.cannotChange.why')}</p>
+              <button
+                type="button"
+                className="button"
+                disabled={claim.isPending}
+                onClick={() => claim.mutate()}
+              >
+                {claim.isPending ? t('status.loading') : t('perm.takeOwnership')}
+              </button>
+            </div>
+          </div>
+        )}
+
+      <ErrorMessage error={claim.error} onDismiss={() => claim.reset()} />
 
       <footer className="detail__footer">
         <button

@@ -23,6 +23,7 @@ import type {
   LocalGroup,
   LoginOptions,
   OpenFile,
+  OwnAccess,
   OptionSpec,
   ServerSession,
   ServerListing,
@@ -31,6 +32,7 @@ import type {
   SessionInfo,
   Share,
   ShareCreate,
+  ShareCreated,
   ShareConnection,
   ShareListing,
   ShareUpdate,
@@ -105,7 +107,7 @@ export const api = {
   shareCatalogue: (language: string) =>
     http.get<{ options: OptionSpec[] }>(`/shares/catalogue?language=${param(language)}`),
 
-  createShare: (share: ShareCreate) => http.post<Record<string, unknown>>('/shares', share),
+  createShare: (share: ShareCreate) => http.post<ShareCreated>('/shares', share),
 
   updateShare: (name: string, changes: ShareUpdate) =>
     http.patch<{ name: string; changes: Record<string, unknown> }>(
@@ -178,6 +180,28 @@ export const api = {
     http.put<{ share: string; path: string; status: string }>(
       `/permissions/path?share=${param(share)}&path=${param(path)}`,
       { sddl, apply_to_children: protectedDacl },
+    ),
+
+  /**
+   * What *this* session may do here, asked of the server.
+   *
+   * The one below computes from the descriptor and says so; this one opens a
+   * handle and lets the server evaluate the whole token, groups included. The
+   * two answer different questions and the difference is not cosmetic: only
+   * this one is safe to build a "you cannot write here" warning on.
+   */
+  ownAccess: (share: string, path: string) =>
+    http.get<OwnAccess>(`/permissions/access?share=${param(share)}&path=${param(path)}`),
+
+  /**
+   * Make the signed-in account the owner of one path.
+   *
+   * Sends the owner and nothing else, which is why it is not part of the
+   * descriptor write: that one needs WRITE_DAC, the very right this obtains.
+   */
+  takeOwnership: (share: string, path: string) =>
+    http.post<{ share: string; path: string; status: string }>(
+      `/permissions/owner?share=${param(share)}&path=${param(path)}`,
     ),
 
   /**

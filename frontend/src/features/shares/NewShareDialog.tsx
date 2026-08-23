@@ -26,6 +26,9 @@ export function NewShareDialog({
   onDone: (name: string, served: boolean) => void
 }) {
   const { t } = useI18n()
+  // Created, and its directory refuses this account. Held here rather than
+  // handed straight back, so the sentence is read before it is dismissed.
+  const [blocked, setBlocked] = useState(false)
   const [name, setName] = useState('')
   const [path, setPath] = useState('')
   const [comment, setComment] = useState('')
@@ -44,12 +47,50 @@ export function NewShareDialog({
         guest_ok: guestOk,
         options: {},
       }),
-    onSuccess: (result) => onDone(name.trim(), result.served !== false),
+    onSuccess: (result) => {
+      // A share is a registry key; the directory it points at is not, and its
+      // permissions were decided by whoever created it on the server. A share
+      // nobody can put anything in is worth stopping on rather than mentioning
+      // in a notice that scrolls away — so a confirmed `false` holds the
+      // dialog open. `null` means the server could not be asked, which is not
+      // the same thing and is not worth stopping anybody for.
+      if (result.root_writable === false) {
+        setBlocked(true)
+        return
+      }
+      onDone(name.trim(), result.served !== false)
+    },
   })
 
   function submit(event: FormEvent) {
     event.preventDefault()
     create.mutate()
+  }
+
+  if (blocked) {
+    return (
+      <Modal
+        title={t('share.created.title')}
+        onClose={() => onDone(name.trim(), true)}
+        footer={
+          <button
+            type="button"
+            className="button button--primary"
+            onClick={() => onDone(name.trim(), true)}
+          >
+            {t('action.close')}
+          </button>
+        }
+      >
+        <p>{t('share.created', { name: name.trim() })}</p>
+        <div className="alert alert--warning">
+          <div className="alert__body">
+            <strong>{t('share.rootNotWritable')}</strong>
+            <p className="alert__hint">{t('share.rootNotWritable.why')}</p>
+          </div>
+        </div>
+      </Modal>
+    )
   }
 
   return (

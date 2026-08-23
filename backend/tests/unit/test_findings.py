@@ -603,3 +603,51 @@ def test_coverage_counts_the_shares_nobody_could_read() -> None:
         "shares_with_readable_configuration": 2,
         "shares_without_readable_configuration": 2,
     }
+
+
+# ---------------------------------------------------------------------------
+# The share root, which no configuration rule can speak for
+# ---------------------------------------------------------------------------
+
+
+def test_a_share_root_that_refuses_this_account_is_a_finding() -> None:
+    """The share exists, the key is right, and nothing can be put in it.
+
+    No other rule on this page produces anything: they all read configuration,
+    and this is about the file system underneath it — the half a console that
+    manages shares over the network does not own.
+    """
+    found = findings.evaluate(roots={"samfscon-test": False})
+    assert [item.id for item in found] == ["share_root_not_writable"]
+    assert found[0].subject == "samfscon-test"
+
+
+def test_a_root_nobody_could_ask_about_is_not_a_finding() -> None:
+    """`None` is the probe saying it could not put the question.
+
+    Turned into a finding it would be this report inventing the exact kind of
+    fault it exists to find — and on every share at once, whenever an SMB
+    connection happened to be refused.
+    """
+    assert findings.evaluate(roots={"samfscon-test": None}) == []
+
+
+def test_a_writable_root_says_nothing() -> None:
+    assert findings.evaluate(roots={"share": True}) == []
+
+
+def test_the_finding_records_that_it_was_asked_rather_than_worked_out() -> None:
+    """The evidence has to distinguish it from the arithmetic next door.
+
+    `effective_access` reads the entries naming one SID and cannot see group
+    membership; this asked the server, which evaluated the whole token. A
+    reader comparing the two needs to know which they are looking at.
+    """
+    found = findings.evaluate(roots={"x": False})
+    assert found[0].evidence["account_groups_included"] is True
+    assert "opening a handle" in found[0].evidence["asked_of"]
+
+
+def test_the_rule_is_declared() -> None:
+    assert "share_root_not_writable" in findings.IDS
+

@@ -285,6 +285,40 @@ export interface OptionSpec {
   requires_vfs: string | null
 }
 
+/**
+ * What this session may do at one path, as the *server* answered it.
+ *
+ * Not computed from the descriptor: that arithmetic reads the entries naming
+ * one SID and cannot see the groups it is in, so on a directory whose only
+ * entry is for Domain Admins it tells a member of Domain Admins they have no
+ * access. Each answer is three-valued, and `null` means the question could not
+ * be put — which is not "may not" and must not be drawn as if it were.
+ */
+export interface OwnAccess {
+  share: string
+  path: string
+  may_create: boolean | null
+  may_change_permissions: boolean | null
+  /** Asked separately, because it is the way out when the one above is false. */
+  may_take_ownership: boolean | null
+}
+
+/** What the server answers when a share has been written. */
+export interface ShareCreated {
+  name: string
+  /** Whether the server is actually serving registry shares. */
+  served?: boolean
+  /**
+   * Whether this account may create anything in the share's own directory,
+   * asked of the server rather than worked out here.
+   *
+   * `null` means the question could not be put — a refused SMB connection, an
+   * old binding — which is not the same as "may not" and must not be shown as
+   * if it were. Only a confirmed `false` is worth stopping anybody for.
+   */
+  root_writable: boolean | null
+}
+
 export interface ShareCreate {
   name: string
   path: string
