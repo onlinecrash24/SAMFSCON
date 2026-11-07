@@ -15,10 +15,49 @@ A target comes from one of three places, in this order of precedence:
 from __future__ import annotations
 
 import ipaddress
+import re
 from dataclasses import dataclass, replace
 
 from samfscon.config import MODE_AD_MEMBER, MODE_AUTO, MODE_STANDALONE
 from samfscon.core.errors import InvalidRequest
+
+# A realm, and the hosts that serve it, end up as lines in the krb5.conf this
+# process writes (:mod:`samfscon.auth.krb5conf`) — rendered into `[realms]` and,
+# lower-cased, into `[domain_realm]`. Until this check existed, the only thing
+# between an unauthenticated request body and that file was `max_length=255` in
+# the schema and `strip().upper()` here. A newline was enough to put a line of
+# the caller's choosing into a process-wide configuration file, where it stayed
+# until restart.
+#
+# So the shape is pinned here, in the value object, rather than at one of the
+# three call sites that build one. A DNS label: letters, digits and inner
+# hyphens, joined by single dots. That is what a realm is (RFC 1035 §2.3.1 by
+# way of RFC 4120 §6.1), and nothing of that alphabet can open a line, close a
+# block, start a comment or make an assignment.
+_LABEL = r"[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?"
+_DNS_NAME_RE = re.compile(rf"^{_LABEL}(?:\.{_LABEL})*$")
+# 253 is the length of a domain name in presentation form (RFC 1035 §2.3.4 as
+# 255 octets, which is 253 characters once the length bytes are accounted for).
+_MAX_NAME = 253
+
+# NetBIOS, which is a different alphabet and a much shorter one: 15 characters,
+# no dots. Checked for the same reason — it reaches smb.conf-shaped settings.
+_NETBIOS_RE = re.compile(r"^[A-Za-z0-9!@#$%^()\-'{}.~_]{1,15}$")
+
+
+def _checked_name(value: str, *, code: str, field: str, what: str) -> str:
+    text = value.strip()
+    if not text or len(text) > _MAX_NAME or not _DNS_NAME_RE.match(text):
+        raise InvalidRequest(
+            f"{what} is not a usable name.",
+            code=code,
+            hint=(
+                "Letters, digits and hyphens, in parts separated by single "
+                "dots — the shape of a DNS name."
+            ),
+            context={field: value},
+        )
+    return text
 
 
 def _is_address(host: str) -> bool:
@@ -63,10 +102,40 @@ class ServerTarget:
                 hint="Enter a server address, or configure SAMFSCON_SERVER_HOST.",
             )
         object.__setattr__(self, "host", host)
+
         if self.realm:
-            object.__setattr__(self, "realm", self.realm.strip().upper())
+            checked = _checked_name(
+                self.realm, code="invalid_realm", field="realm", what="The realm"
+            )
+            object.__setattr__(self, "realm", checked.upper())
+
         if self.workgroup:
-            object.__setattr__(self, "workgroup", self.workgroup.strip().upper())
+            workgroup = self.workgroup.strip()
+            if not _NETBIOS_RE.match(workgroup):
+                raise InvalidRequest(
+                    "The workgroup is not a usable NetBIOS name.",
+                    code="invalid_workgroup",
+                    hint="At most 15 characters, and no dots or spaces.",
+                    context={"workgroup": self.workgroup},
+                )
+            object.__setattr__(self, "workgroup", workgroup.upper())
+
+        if self.kdcs:
+            # Each becomes its own `kdc = …` line beside the realm. A literal
+            # address is a legitimate KDC and is not a DNS name, so it is
+            # checked as what it is rather than forced through the same regex.
+            checked_kdcs = []
+            for kdc in self.kdcs:
+                text = (kdc or "").strip()
+                if _is_address(text):
+                    checked_kdcs.append(text)
+                    continue
+                checked_kdcs.append(
+                    _checked_name(
+                        text, code="invalid_kdc_host", field="kdc", what="A key distribution centre"
+                    )
+                )
+            object.__setattr__(self, "kdcs", tuple(checked_kdcs))
 
     @property
     def uses_kerberos(self) -> bool:

@@ -15,8 +15,10 @@ ticket never reads a half-written configuration.
 
 from __future__ import annotations
 
+import ipaddress
 import logging
 import os
+import re
 import threading
 from dataclasses import dataclass
 from pathlib import Path
@@ -25,6 +27,42 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_TICKET_LIFETIME = "10h"
 DEFAULT_RENEW_LIFETIME = "7d"
+
+# The last line of defence for the file this module owns.
+#
+# Callers are supposed to hand over a checked value — `ServerTarget` validates
+# every realm and KDC that comes from a request — but one of the two callers
+# passes the container's own setting straight through, and a module that writes
+# a configuration file should not depend on everybody upstream remembering. A
+# value of this shape cannot open a line, close a block, start a comment or
+# make an assignment, which is the whole of what could go wrong here.
+_LABEL = r"[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?"
+_SAFE_NAME = re.compile(rf"^{_LABEL}(?:\.{_LABEL})*$")
+
+
+def _usable(value: str, what: str, *, allow_address: bool = False) -> bool:
+    """Whether *value* may be written into the file.
+
+    Refuses rather than raises: the bootstrap path runs at start-up from a
+    container setting, and a typo there should cost the realm entry — after
+    which Kerberos falls back to DNS discovery — and not the container.
+
+    ``allow_address`` is for KDCs, and it is not decoration: naming the KDC by
+    address is what makes this module work against a domain the container
+    cannot resolve, which is the reason given at the top of this file. An IPv6
+    address carries colons and brackets and would never pass the name check.
+    """
+    if _SAFE_NAME.match(value) and len(value) <= 253:
+        return True
+    if allow_address:
+        try:
+            ipaddress.ip_address(value.strip("[]"))
+        except ValueError:
+            pass
+        else:
+            return True
+    logger.error("refusing to write %s %r into krb5.conf: not a usable name", what, value)
+    return False
 
 
 @dataclass(frozen=True)
@@ -72,10 +110,19 @@ class Krb5Configuration:
         something actually changed.
         """
         realm = realm.strip().upper()
-        if not realm:
+        if not realm or not _usable(realm, "realm"):
             return
 
-        entry = RealmEntry(realm=realm, kdcs=tuple(dict.fromkeys(k for k in kdcs if k)))
+        entry = RealmEntry(
+            realm=realm,
+            kdcs=tuple(
+                dict.fromkeys(
+                    k.strip()
+                    for k in kdcs
+                    if k and _usable(k.strip(), "kdc host", allow_address=True)
+                )
+            ),
+        )
 
         with self._lock:
             existing = self._realms.get(realm)
@@ -97,7 +144,7 @@ class Krb5Configuration:
 
     def set_default_realm(self, realm: str) -> None:
         realm = realm.strip().upper()
-        if not realm:
+        if not realm or not _usable(realm, "default realm"):
             return
         with self._lock:
             if self._default_realm == realm:

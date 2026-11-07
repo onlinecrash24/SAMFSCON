@@ -124,7 +124,14 @@ def _from_profile(
     target = ServerTarget(
         host=profile.host,
         mode=_pick_mode(mode, profile.mode),
-        realm=realm or profile.realm,
+        # The profile wins. A profile is where an administrator says which
+        # servers this console may be pointed at; letting the request body
+        # replace half of it means the profile decided the host and the caller
+        # decided the realm, which is not a profile but a form with one field
+        # filled in. The caller may still *supply* one where the profile has
+        # none — that is the shape the documentation shows for a server whose
+        # realm is discovered rather than configured.
+        realm=profile.realm or realm,
         workgroup=profile.workgroup,
         kdcs=tuple(settings.kdc_hosts),
         label=profile.label,
