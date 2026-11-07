@@ -44,6 +44,12 @@ jobs:
       # The `test` stage of the Dockerfile is the runtime image plus pytest and
       # the suite, so the tests run against exactly what ships rather than
       # against a separately installed set of dependencies.
+      # Today's date reruns the cached package layer once a day, so Debian's
+      # security fixes reach the image (docker/Dockerfile, APT_REFRESH).
+      - name: Date for the package refresh
+        id: refresh
+        run: echo "date=$(date -u +%F)" >> "$GITHUB_OUTPUT"
+
       - name: Build the test image
         uses: docker/build-push-action@v6
         with:
@@ -51,6 +57,7 @@ jobs:
           file: docker/Dockerfile
           target: test
           load: true
+          build-args: APT_REFRESH=${{ steps.refresh.outputs.date }}
           tags: samfscon:test
           cache-from: type=gha
           cache-to: type=gha,mode=max
@@ -59,6 +66,22 @@ jobs:
       # nginx templating, krb5.conf — none of which a test run needs.
       - name: Unit tests
         run: docker run --rm --entrypoint python samfscon:test -m pytest tests/unit -q -m "not repo"
+
+      # The proof that the refresh above did its job: nothing Debian has
+      # published as a security update is missing from the image. Root, because
+      # the shipped container drops what apt needs.
+      - name: No pending Debian security updates
+        run: |
+          docker run --rm -u 0 --entrypoint sh samfscon:test -c '
+            apt-get update -qq
+            pending=$(apt list --upgradable 2>/dev/null | grep -- "-security" || true)
+            if [ -n "$pending" ]; then
+              echo "Security updates missing from the image:"
+              echo "$pending"
+              exit 1
+            fi
+            echo "no pending security updates"
+          '
 
       # The `repo` ones read what the image does not carry: the front end's
       # message catalogue (every code the backend emits has a sentence in both
@@ -142,11 +165,19 @@ jobs:
           EXPECTED_TAG: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
         run: python scripts/check_versions.py
 
-      # What a build gets today.
-      - name: Audit the dependencies as declared
-        run: |
-          python scripts/dependency_requirements.py > /tmp/declared.txt
-          pip-audit --strict -r /tmp/declared.txt
+      # The image installs from backend/requirements.lock with --require-hashes,
+      # so the lock *is* what a build gets. This holds it to pyproject.toml —
+      # every declared dependency pinned inside its bounds, every pin hashed —
+      # without re-resolving, which would fail whenever anything upstream
+      # released.
+      - name: The lock agrees with pyproject.toml
+        run: python scripts/check_lock.py
+
+      # Exactly what ships: the lock, read as it is. This used to audit a fresh
+      # resolution of the declared ranges — what a build got on that day and on
+      # no other.
+      - name: Audit the dependencies at the versions the image installs
+        run: pip-audit --strict --disable-pip -r backend/requirements.lock
 
       # And what the constraints still permit. This is the one nothing else
       # asks: `>=` resolves to the newest release, so a fresh build is never
@@ -203,6 +234,12 @@ jobs:
             type=sha,format=short
             type=raw,value=latest,enable={{is_default_branch}}
 
+      # The same date as the test job, so the published image is the one whose
+      # packages that job just checked — not one from the cache of a day before.
+      - name: Date for the package refresh
+        id: refresh
+        run: echo "date=$(date -u +%F)" >> "$GITHUB_OUTPUT"
+
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
@@ -211,6 +248,7 @@ jobs:
           # The product, not the test image: pytest and the suite have no place
           # in something people deploy.
           target: runtime
+          build-args: APT_REFRESH=${{ steps.refresh.outputs.date }}
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}

@@ -46,10 +46,22 @@ ENV DEBIAN_FRONTEND=noninteractive \
 # Deliberately NOT installed: the `samba` package itself. That is the server,
 # and this container is a client — installing it would drag smbd, nmbd and the
 # provisioning stack in for nothing.
-RUN apt-get update && apt-get install -y --no-install-recommends \
+#
+# APT_REFRESH is the build date, set by CI. This layer is cached, and a cached
+# layer keeps whatever Debian shipped the day it was first built. A new value
+# runs it again — at most once a day — and the upgrade brings the base image's
+# own packages along, which an install alone leaves as they were.
+#
+# python3-pip is not installed. The venv below gets its own from python3-venv,
+# uses it once and removes it — and with --system-site-packages a system pip
+# would still be importable afterwards, so it would quietly stay in the image.
+ARG APT_REFRESH=unset
+RUN echo "package refresh: ${APT_REFRESH}" \
+    && apt-get update \
+    && apt-get upgrade -y --no-install-recommends \
+    && apt-get install -y --no-install-recommends \
         python3 \
         python3-venv \
-        python3-pip \
         python3-samba \
         smbclient \
         samba-common-bin \
@@ -71,10 +83,21 @@ ENV PATH="/opt/venv/bin:${PATH}"
 
 WORKDIR /opt/samfscon
 
-COPY backend/pyproject.toml ./
+# The dependencies come from a lock with a hash for every file, so the image
+# holds exactly what the lock names and what CI audited — not whatever PyPI
+# resolved `>=` to on the day of the build. The project follows without its
+# dependencies; they are all in already. pip is not upgraded first: that would
+# be the one download here nothing checks. And then pip goes — nothing installs
+# anything once the image runs, and an installer left in it is one more
+# package to keep patched.
+COPY backend/pyproject.toml backend/requirements.lock ./
 COPY backend/samfscon ./samfscon
-RUN pip install --no-cache-dir --upgrade pip \
-    && pip install --no-cache-dir .
+RUN pip install --no-cache-dir --require-hashes -r requirements.lock \
+    && pip install --no-cache-dir --no-deps . \
+    && pip uninstall -y pip
+
+# The build stops if pip can still be imported, from the venv or the system.
+RUN ! python -c "import pip" 2>/dev/null
 
 COPY --from=frontend /build/dist /srv/samfscon/www
 COPY docker/nginx.conf.template /etc/samfscon/nginx.conf.template
@@ -125,6 +148,9 @@ FROM runtime AS test
 
 USER root
 COPY backend/tests /opt/samfscon/tests
-RUN pip install --no-cache-dir "pytest>=8.2" "pytest-asyncio>=0.23" "httpx>=0.27" \
+# pip comes back for this stage only, from the wheel python3-venv bundles. The
+# runtime image has none and checks that it has none.
+RUN python -m ensurepip \
+    && python -m pip install --no-cache-dir "pytest>=8.2" "pytest-asyncio>=0.23" "httpx>=0.27" \
     && chown -R samfscon:samfscon /opt/samfscon
 USER samfscon
