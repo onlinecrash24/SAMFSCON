@@ -60,10 +60,11 @@ jobs:
       - name: Unit tests
         run: docker run --rm --entrypoint python samfscon:test -m pytest tests/unit -q -m "not repo"
 
-      # The `repo` ones read the front end's message catalogue, to check that
-      # every code the backend can emit has a sentence in both languages. The
-      # image carries the built bundle and no source, so the checkout is
-      # mounted for this one run — read-only, and beside the suite rather than
+      # The `repo` ones read what the image does not carry: the front end's
+      # message catalogue (every code the backend emits has a sentence in both
+      # languages) and the nginx template (every location with an add_header of
+      # its own re-includes the security headers). The checkout is mounted for
+      # this one run — read-only, and beside the suite rather than
       # inside it, because what is being checked is that the two halves of the
       # repository agree and not that the artefact is sound.
       #
@@ -71,7 +72,7 @@ jobs:
       # that was meant to check must not report a pass having checked nothing.
       - name: The two halves agree
         run: |
-          docker run --rm --entrypoint python -v "${{ github.workspace }}/frontend:/opt/frontend:ro" samfscon:test -m pytest tests/unit -q -m repo
+          docker run --rm --entrypoint python -v "${{ github.workspace }}/frontend:/opt/frontend:ro" -v "${{ github.workspace }}/docker:/opt/docker:ro" samfscon:test -m pytest tests/unit -q -m repo
 
       # The frontend half. Run on the runner rather than in the image, because
       # the shipped image contains the built bundle and no node — building a

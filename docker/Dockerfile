@@ -78,6 +78,7 @@ RUN pip install --no-cache-dir --upgrade pip \
 
 COPY --from=frontend /build/dist /srv/samfscon/www
 COPY docker/nginx.conf.template /etc/samfscon/nginx.conf.template
+COPY docker/security-headers.conf /etc/samfscon/security-headers.conf
 COPY docker/supervisord.conf /etc/samfscon/supervisord.conf
 COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
