@@ -161,7 +161,12 @@ def test_a_half_answered_policy_decides_nothing() -> None:
 
 
 @pytest.fixture
-def settings() -> Settings:
+def settings(monkeypatch: pytest.MonkeyPatch) -> Settings:
+    # These tests are about discovery from a typed address, and both of the
+    # switches that permit it are off by default. Turned on here, explicitly,
+    # rather than inherited — the policy has tests of its own.
+    monkeypatch.setenv("SAMFSCON_ALLOW_CUSTOM_SERVERS", "1")
+    monkeypatch.setenv("SAMFSCON_ALLOW_STANDALONE", "1")
     return Settings()
 
 
@@ -243,6 +248,9 @@ def test_standalone_is_refused_when_the_installation_forbids_it(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """The switch exists so an installation can decline the memory trade."""
+    # Free entry on, so the refusal that arrives is the one under test and not
+    # the earlier one about typed addresses.
+    monkeypatch.setenv("SAMFSCON_ALLOW_CUSTOM_SERVERS", "1")
     monkeypatch.setenv("SAMFSCON_ALLOW_STANDALONE", "0")
     settings = Settings()
     _stub_probe(monkeypatch, ServerProbe(host="nas.local", reachable=True, mode=MODE_STANDALONE))

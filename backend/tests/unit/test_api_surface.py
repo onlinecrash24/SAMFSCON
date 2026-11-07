@@ -212,3 +212,31 @@ def test_a_configuration_write_is_refused_without_the_csrf_header(client: TestCl
 
     response = client.patch("/api/v1/config", json={"options": {}})
     assert response.status_code == 401
+
+
+# ---------------------------------------------------------------------------
+# What answers before anyone signs in
+# ---------------------------------------------------------------------------
+
+
+def test_info_carries_only_what_the_sign_in_form_reads(client: TestClient) -> None:
+    """Reachable without a session, so held to exactly what the form uses.
+
+    It used to describe the deployment — default server, realm, workgroup, the
+    SMB floor — and count the administrators signed in right now. The form read
+    none of it. A field added here later is a field the whole network can read.
+    """
+    response = client.get("/api/v1/info")
+    assert response.status_code == 200
+    assert set(response.json()) == {"version", "allow_standalone"}
+
+
+def test_the_api_documentation_is_not_served_by_default(client: TestClient) -> None:
+    """A map of every route and parameter, reachable without a session.
+
+    Switched on with SAMFSCON_API_DOCS=1. The schema itself is still built
+    in-process — app.openapi() is what the tests above read.
+    """
+    assert client.get("/api/docs").status_code == 404
+    assert client.get("/api/openapi.json").status_code == 404
+

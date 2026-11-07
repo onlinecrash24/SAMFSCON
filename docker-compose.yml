@@ -11,7 +11,7 @@
 # machine rather than to the project — a password, a port that is already taken.
 # Compose reads those from the shell:
 #
-#   TEST_ADMIN_PASSWORD=… docker compose up -d --build
+#   SAMFSCON_HTTPS_PORT=9443 docker compose up -d --build
 #
 # or from a `docker-compose.override.yml`, which is in .gitignore. **Never write
 # a password into this file** — it is in version control.
@@ -64,13 +64,17 @@ services:
       # A JSON file listing servers to offer in the sign-in form; see
       # docker/servers/servers.example.json.
       SAMFSCON_SERVERS_FILE: ""
-      # 0 allows only the configured servers — administrators can then no
-      # longer type an arbitrary address.
-      SAMFSCON_ALLOW_CUSTOM_SERVERS: "1"
-      # A standalone server has no Kerberos, so its sessions hold the password
-      # in memory for as long as they last. 0 refuses that trade outright and
-      # allows only domain members.
-      SAMFSCON_ALLOW_STANDALONE: "1"
+      # 1 lets the sign-in form take an arbitrary server address. Off by
+      # default: with it on, anybody who reaches the sign-in page can make this
+      # container open SMB connections to a host of their choosing, before
+      # signing in. Name servers with SAMFSCON_SERVER_HOST or a profiles file
+      # instead; switch this on only where the field is wanted.
+      SAMFSCON_ALLOW_CUSTOM_SERVERS: "0"
+      # 1 permits standalone servers. A standalone server has no Kerberos, so
+      # its sessions hold the password in memory for as long as they last —
+      # see the README. Off by default, so the trade is made by somebody who
+      # decided to and not inherited by everybody who did not.
+      SAMFSCON_ALLOW_STANDALONE: "0"
 
       # --- SMB ------------------------------------------------------------
       # The floor, not a preference. Signing is always required; this is the
@@ -108,24 +112,6 @@ services:
       # Extra diagnostics and a more talkative error surface.
       SAMFSCON_DEV_MODE: "0"
 
-      # --- Integration tests -----------------------------------------------
-      # Only read when the image is built with SAMFSCON_TARGET=test. They come
-      # from the shell rather than from here because one of them is an
-      # administrator's password:
-      #
-      #   TEST_FS_HOST=fs1.example.lan TEST_ADMIN_PASSWORD=… \
-      #     docker compose exec samfscon python -m pytest tests/integration -q
-      #
-      # Without TEST_FS_HOST and TEST_ADMIN_PASSWORD the tests skip themselves.
-      TEST_FS_HOST: "${TEST_FS_HOST:-}"
-      TEST_FS_MODE: "${TEST_FS_MODE:-}"
-      TEST_REALM: "${TEST_REALM:-}"
-      TEST_ADMIN_USER: "${TEST_ADMIN_USER:-Administrator}"
-      TEST_ADMIN_PASSWORD: "${TEST_ADMIN_PASSWORD:-}"
-      # An existing directory on the test server that shares may point at. The
-      # tests cannot create one — that is the limit of managing a server over
-      # the network, and it applies to them too.
-      TEST_SHARE_PATH: "${TEST_SHARE_PATH:-/srv/samfscon-test}"
 
       # Which hops in front of this container may be believed when they say who
       # the caller is. Comma- or space-separated addresses or CIDR ranges; the

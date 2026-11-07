@@ -71,7 +71,17 @@ export function LoginView() {
     setRecents(listRecentServers())
   }, [])
 
-  const isCustom = choice === CUSTOM
+  // Nothing configured and nothing typable: no default server, no profiles, and
+  // free entry switched off — which is now the shipped default. The form would
+  // otherwise fall back to the address field and the server would refuse
+  // whatever was typed into it, a dead end that explains itself only after a
+  // password has been entered. Said up front instead, with what to set.
+  const nothingToReach =
+    servers !== null &&
+    !servers.default &&
+    servers.profiles.length === 0 &&
+    !servers.allow_custom_servers
+  const isCustom = choice === CUSTOM && !nothingToReach
   const profile = useMemo(
     () => servers?.profiles.find((item) => item.id === choice) ?? null,
     [servers, choice],
@@ -172,6 +182,7 @@ export function LoginView() {
   }
 
   const canSubmit =
+    !nothingToReach &&
     username.trim().length > 0 &&
     password.length > 0 &&
     (!isCustom || host.trim().length > 0) &&
@@ -183,6 +194,8 @@ export function LoginView() {
         <LogoLockup className="login__logo" />
 
         {/* -- which server ------------------------------------------------ */}
+
+        {nothingToReach && <Banner tone="warning" message={t('login.noServerConfigured')} />}
 
         {servers && (servers.profiles.length > 0 || servers.default) && (
           <Field label={t('login.profile')}>

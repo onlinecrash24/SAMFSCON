@@ -57,6 +57,8 @@ export const de = {
   'login.profileNone': 'Adresse eingeben',
   'login.recent': 'Zuletzt verwendet',
   'login.forget': 'Entfernen',
+  'login.noServerConfigured':
+    'Hier ist kein Server eingerichtet, und eine Adresse einzutippen ist abgeschaltet. Der Betreiber setzt SAMFSCON_SERVER_HOST oder legt Serverprofile an (SAMFSCON_SERVERS_FILE) — oder erlaubt freie Eingabe mit SAMFSCON_ALLOW_CUSTOM_SERVERS=1.',
   'login.realm': 'Kerberos-Realm',
   'login.realmHelp': 'Nur nötig, wenn der Server ihn nicht selbst nennt.',
 
@@ -960,6 +962,8 @@ export const en: Record<MessageKey, string> = {
   'login.profileNone': 'Type an address',
   'login.recent': 'Recently used',
   'login.forget': 'Remove',
+  'login.noServerConfigured':
+    'No server is configured here, and typing an address is switched off. The operator sets SAMFSCON_SERVER_HOST or adds server profiles (SAMFSCON_SERVERS_FILE) — or allows free entry with SAMFSCON_ALLOW_CUSTOM_SERVERS=1.',
   'login.realm': 'Kerberos realm',
   'login.realmHelp': 'Only needed when the server will not name it itself.',
 

@@ -61,8 +61,12 @@ etwas anderes zu behaupten wäre genau die Art von Sicherheitsversprechen, die d
 vermeiden will.
 
 Das Anmeldeformular sagt es in dem Moment, in dem die Wahl getroffen wird, die Sitzungsleiste
-wiederholt es für die ganze Dauer der Sitzung, und `SAMFSCON_ALLOW_STANDALONE=0` lehnt den Handel
-für Installationen, die ihn nicht wollen, von vornherein ab.
+wiederholt es für die ganze Dauer der Sitzung — und der Handel ist aus, bis eine Installation ihn
+eingeht: eigenständige Server brauchen `SAMFSCON_ALLOW_STANDALONE=1`. Eine beliebige Serveradresse
+ins Anmeldeformular einzutippen ist ebenso aus (`SAMFSCON_ALLOW_CUSTOM_SERVERS=1`), denn
+eingeschaltet kann jeder, der die Anmeldeseite erreicht, diesen Container vor der Anmeldung
+SMB-Verbindungen zu einem Host seiner Wahl öffnen lassen. Server benennt man stattdessen mit
+`SAMFSCON_SERVER_HOST` oder einer Profildatei.
 
 Beide Verbindungen sind **signiert und mindestens SMB3**. SMB1 wird nicht verhandelt.
 `SAMFSCON_SMB_ENCRYPT=1` verlangt zusätzlich SMB3-Verschlüsselung, wo der Server sie anbietet.
@@ -383,14 +387,11 @@ nach, nennt in der Rückfrage, wen es trifft, und landet mit beidem im Audit-Log
 cd backend && python -m pytest tests/unit -q
 ```
 
-**Integrationstests** — gegen einen Wegwerf-Fileserver, nie gegen Produktion. Sie legen Freigaben
-an und löschen sie wieder:
-
-```bash
-SAMFSCON_TARGET=test docker compose up -d --build
-TEST_FS_HOST=fs1.example.lan TEST_ADMIN_PASSWORD=… \
-  docker compose exec samfscon python -m pytest tests/integration -q
-```
+**Integrationstests gibt es noch nicht.** Dieser Abschnitt hat beschrieben, wie man sie ausführt,
+und docker-compose.yml hat dafür jedem Container — auch dem produktiven — ein
+Administratorkennwort mitgegeben, für eine Testsammlung, die nie geschrieben wurde:
+`tests/integration` enthält seit dem ersten Commit nur eine leere `__init__.py`. Die Prüfung gegen
+einen echten Server ist bisher von Hand erfolgt und steht unten als solche.
 
 **Von außen** — der Teil, der es tatsächlich entscheidet. Eine Freigabe, die diese Konsole anlegt,
 muss außerhalb dieser Konsole existieren:

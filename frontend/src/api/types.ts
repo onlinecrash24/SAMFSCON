@@ -65,18 +65,15 @@ export interface ServerProbe {
   allow_standalone: boolean
 }
 
+/**
+ * What the sign-in form reads before anyone signs in, and nothing more.
+ *
+ * Reachable without a session, so it is deliberately small. Anything the form
+ * needs about a particular server comes from /servers.
+ */
 export interface AppInfo {
   version: string
-  server_host: string | null
-  server_mode: ServerMode
-  realm: string | null
-  workgroup: string | null
-  allow_custom_servers: boolean
   allow_standalone: boolean
-  has_server_profiles: boolean
-  mode_is_discovered: boolean
-  smb: { min_protocol: string; encrypt: boolean }
-  sessions: { active: number; workers: number; idle_timeout_minutes: number }
 }
 
 // ---------------------------------------------------------------------------

@@ -60,8 +60,11 @@ than "we do not store it", and saying otherwise would be the kind of security cl
 is written to avoid.
 
 The sign-in form says so at the moment the choice is made, the session bar repeats it for as long
-as the session lasts, and `SAMFSCON_ALLOW_STANDALONE=0` refuses the trade outright for
-installations that do not want it.
+as the session lasts — and the trade is off until an installation makes it: standalone servers
+need `SAMFSCON_ALLOW_STANDALONE=1`. Typing an arbitrary server address into the sign-in form is
+off the same way (`SAMFSCON_ALLOW_CUSTOM_SERVERS=1`), because with it on, anybody who reaches the
+sign-in page can make this container open SMB connections to a host of their choosing before
+signing in. Name servers with `SAMFSCON_SERVER_HOST` or a profiles file instead.
 
 Both connections are **signed and SMB3 or better**. SMB1 is not negotiated. `SAMFSCON_SMB_ENCRYPT=1`
 additionally requires SMB3 encryption, where the server offers it.
@@ -362,14 +365,11 @@ the confirmation, and lands in the audit log with both.
 cd backend && python -m pytest tests/unit -q
 ```
 
-**Integration tests** — against a throwaway file server, never production. They create and delete
-shares:
-
-```bash
-SAMFSCON_TARGET=test docker compose up -d --build
-TEST_FS_HOST=fs1.example.lan TEST_ADMIN_PASSWORD=… \
-  docker compose exec samfscon python -m pytest tests/integration -q
-```
+**Integration tests do not exist yet.** This section used to describe how to run them, and
+docker-compose.yml handed an administrator's password into every container — the production one
+included — for a suite that was never written: `tests/integration` has held only an empty
+`__init__.py` since the first commit. Verification against a real server has been done by hand,
+and is recorded as such below.
 
 **From outside** — the part that actually settles it. A share this console creates has to exist
 outside this console:

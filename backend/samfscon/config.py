@@ -113,8 +113,12 @@ class Settings(BaseSettings):
     servers_file: Path | None = Field(
         default=None, description="JSON file with pre-configured server profiles"
     )
+    # Off unless switched on. With it on, anybody who can reach the sign-in
+    # page can make this container open SMB connections to a host of their
+    # choosing — the probe runs before anyone has signed in. Profiles are the
+    # safe way to name servers; this is for installations that want the field.
     allow_custom_servers: bool = Field(
-        default=True,
+        default=False,
         description="Whether administrators may type an arbitrary server address",
     )
 
@@ -143,9 +147,20 @@ class Settings(BaseSettings):
     # memory for as long as they live (see samfscon.auth.credentials). That is a
     # real trade, and an installation that does not want to make it can refuse
     # standalone sign-ins outright rather than rely on nobody trying.
+    #
+    # Off unless switched on, for the same reason: the trade should be made by
+    # somebody who decided to, not inherited by everybody who did not.
     allow_standalone: bool = Field(
-        default=True,
+        default=False,
         description="Whether standalone (non-Kerberos) servers may be managed at all",
+    )
+
+    # The interactive API documentation and the schema behind it. Off unless
+    # switched on: both are reachable without a session, and they are a map of
+    # every route and every parameter this console accepts.
+    api_docs: bool = Field(
+        default=False,
+        description="Serve /api/docs and /api/openapi.json",
     )
 
     # --- Samba ------------------------------------------------------------

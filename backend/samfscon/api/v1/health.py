@@ -7,9 +7,7 @@ from typing import Any
 from fastapi import APIRouter
 
 from samfscon import __version__
-from samfscon.auth.session import get_store
-from samfscon.config import MODE_AUTO, get_settings
-from samfscon.core.executor import get_registry
+from samfscon.config import get_settings
 
 router = APIRouter(tags=["system"])
 
@@ -22,29 +20,23 @@ def health() -> dict[str, Any]:
 
 @router.get("/info")
 def info() -> dict[str, Any]:
-    """What the front end needs before anyone signs in."""
+    """What the sign-in form reads before anyone signs in — and nothing else.
+
+    Reachable without a session, so it carries only what the form actually
+    uses: the version, which the source-code notice the AGPL requires shows on
+    the sign-in page, and whether standalone servers are permitted, which greys
+    out that option rather than letting somebody fill the form in and be
+    refused at the end.
+
+    It used to carry the default server's address, its realm and workgroup, the
+    SMB floor, whether profiles exist, and a live count of signed-in
+    administrators and workers. The front end read none of it. To anybody else
+    it was a description of the deployment and of who was using it right now —
+    SAMADCON dropped the same fields for the same reason. What the form needs
+    about a server comes from /servers, which is shaped for exactly that.
+    """
     settings = get_settings()
     return {
         "version": __version__,
-        # Empty when no default server is configured — the sign-in form then
-        # asks for an address.
-        "server_host": settings.server_host or None,
-        "server_mode": settings.server_mode,
-        "realm": settings.realm or None,
-        "workgroup": settings.netbios_name or None,
-        "allow_custom_servers": settings.allow_custom_servers,
-        # The sign-in form greys out the standalone option when this is false,
-        # rather than letting someone fill the form in and be refused at the end.
         "allow_standalone": settings.allow_standalone,
-        "has_server_profiles": bool(settings.servers_file),
-        "mode_is_discovered": settings.server_mode == MODE_AUTO,
-        "smb": {
-            "min_protocol": settings.smb_min_protocol,
-            "encrypt": settings.smb_encrypt,
-        },
-        "sessions": {
-            "active": get_store().count(),
-            "workers": get_registry().active_sessions(),
-            "idle_timeout_minutes": settings.session_idle_minutes,
-        },
     }

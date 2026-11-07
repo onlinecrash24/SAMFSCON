@@ -113,9 +113,12 @@ app = FastAPI(
     ),
     version=__version__,
     lifespan=lifespan,
-    docs_url="/api/docs",
+    # Only when asked for (SAMFSCON_API_DOCS=1). Both are reachable without a
+    # session and amount to a map of every route and parameter. app.openapi()
+    # still builds the schema in-process, which is what the tests read.
+    docs_url="/api/docs" if get_settings().api_docs else None,
     redoc_url=None,
-    openapi_url="/api/openapi.json",
+    openapi_url="/api/openapi.json" if get_settings().api_docs else None,
 )
 
 app.include_router(api_router)

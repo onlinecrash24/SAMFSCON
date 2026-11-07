@@ -11,13 +11,31 @@ from samfscon.config import MODE_AD_MEMBER, MODE_AUTO, MODE_STANDALONE, Settings
 
 
 def test_defaults_need_no_server() -> None:
-    """An empty configuration is a valid one: the form asks for an address."""
+    """An empty configuration is a valid one — and a closed one.
+
+    It starts without complaint, and the sign-in form says that nothing is
+    configured and what to set, rather than offering an address field the
+    server will refuse.
+    """
     settings = Settings()
     assert settings.server_host == ""
     assert settings.server_mode == MODE_AUTO
     assert settings.default_target is None
-    assert settings.allow_custom_servers is True
-    assert settings.allow_standalone is True
+
+
+def test_the_risky_switches_are_off_unless_switched_on() -> None:
+    """Secure by default, as the review of 4da4144 asked.
+
+    Free entry lets anybody who reaches the sign-in page make this container
+    open SMB connections to a host of their choosing, before signing in.
+    Standalone sign-ins hold the password in memory for the life of the
+    session. The API documentation is a map of every route, without a session.
+    Each is a trade somebody should decide to make, not inherit.
+    """
+    settings = Settings()
+    assert settings.allow_custom_servers is False
+    assert settings.allow_standalone is False
+    assert settings.api_docs is False
 
 
 def test_realm_and_workgroup_are_upper_cased(monkeypatch: pytest.MonkeyPatch) -> None:
