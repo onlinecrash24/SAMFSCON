@@ -240,3 +240,59 @@ def test_the_api_documentation_is_not_served_by_default(client: TestClient) -> N
     assert client.get("/api/docs").status_code == 404
     assert client.get("/api/openapi.json").status_code == 404
 
+
+def _api_routes(routes) -> list:
+    """Every APIRoute under *routes*, however deeply routers are included.
+
+    Walked rather than read off app.routes: recent FastAPI keeps an included
+    router as one object, so app.routes holds a single entry and a loop over it
+    finds nothing. The first version of the test below did exactly that and
+    passed — with the two routes it exists to catch still unchecked.
+    """
+    from fastapi.routing import APIRoute
+
+    found: list = []
+    for route in routes:
+        if isinstance(route, APIRoute):
+            found.append(route)
+        elif getattr(route, "original_router", None) is not None:
+            found.extend(_api_routes(route.original_router.routes))
+        elif getattr(route, "routes", None):
+            found.extend(_api_routes(route.routes))
+    return found
+
+
+def test_every_state_changing_verb_carries_the_csrf_check() -> None:
+    """The rule is by method, not by effect.
+
+    The two identity lookups are POST and change nothing, and they were the two
+    that skipped the double-submit check. Read-only today; but a POST route
+    without it is the template somebody copies for the next one that writes.
+    Enumerated from the application, so a route added later is held to it too.
+    """
+    import inspect
+
+    from samfscon.main import app
+
+    # Signing in and out cannot carry a token the server has not issued yet or
+    # has just withdrawn, and the probe answers before anyone has a session.
+    exempt = ("/auth/login", "/auth/logout", "/servers/probe")
+    routes = _api_routes(app.routes)
+    writing = [
+        route
+        for route in routes
+        if route.methods & {"POST", "PUT", "PATCH", "DELETE"}
+        and not route.path.endswith(exempt)
+    ]
+    # A guard over an empty list passes and proves nothing — which is how the
+    # first version of this test got through.
+    assert len(writing) >= 15, f"found only {len(writing)} state-changing routes"
+
+    unchecked = []
+    for route in writing:
+        annotations = " ".join(
+            str(p.annotation) for p in inspect.signature(route.endpoint).parameters.values()
+        )
+        if "VerifiedSession" not in annotations and "VerifiedWorker" not in annotations:
+            unchecked.append(f"{sorted(route.methods)} {route.path}")
+    assert not unchecked, f"state-changing routes without the CSRF check: {unchecked}"

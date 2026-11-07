@@ -260,12 +260,27 @@ class LoginThrottle:
             keys.append(f"ip:{client_ip}")
         return keys
 
+    def check_address(self, client_ip: str | None) -> None:
+        """The address alone, before anything else happens.
+
+        Sign-in resolves its target first, and resolving may probe the network
+        — an unauthenticated SMB and LSA exchange with whatever host the form
+        named. The full check needs the account name, which only exists after
+        that. So the address is checked on its own, first, and a caller already
+        over the limit costs nothing: no worker, no probe.
+        """
+        if client_ip:
+            self._check_keys([f"ip:{client_ip}"])
+
     def check(self, username: str, client_ip: str | None = None) -> None:
+        self._check_keys(self._keys(username, client_ip))
+
+    def _check_keys(self, keys: list[str]) -> None:
         if not self.enabled:
             return
         now = _now()
         with self._lock:
-            for key in self._keys(username, client_ip):
+            for key in keys:
                 entry = self._failures.get(key)
                 if entry is None:
                     continue
@@ -286,12 +301,26 @@ class LoginThrottle:
                         context={"retry_after_seconds": max(remaining, 1)},
                     )
 
+    def record_address_failure(self, client_ip: str | None) -> None:
+        """A failure that happened before there was an account to name.
+
+        Resolving the target fails with no user name in hand — an unknown host,
+        a probe refused — and those failures were not counted at all, so the
+        sign-in form could be used to make this container probe host after host
+        without ever meeting the throttle. They count against the address.
+        """
+        if client_ip:
+            self._record_keys([f"ip:{client_ip}"])
+
     def record_failure(self, username: str, client_ip: str | None = None) -> None:
+        self._record_keys(self._keys(username, client_ip))
+
+    def _record_keys(self, keys: list[str]) -> None:
         if not self.enabled:
             return
         now = _now()
         with self._lock:
-            for key in self._keys(username, client_ip):
+            for key in keys:
                 count, last = self._failures.get(key, (0, now))
                 if now - last > self.lockout:
                     count = 0

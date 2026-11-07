@@ -13,13 +13,36 @@ from samfscon.auth.deps import CurrentSession, client_ip
 from samfscon.auth.session import SessionSecret, get_store, get_throttle
 from samfscon.config import get_settings
 from samfscon.core.audit import get_audit
-from samfscon.core.errors import SamfsconError
+from samfscon.core.errors import AuthenticationError, SamfsconError
 from samfscon.core.executor import get_registry
 from samfscon.schemas.requests import LoginRequest
 from samfscon.srv import targets
 from samfscon.srv.access import srv_read
 
 logger = logging.getLogger(__name__)
+# The answers a sign-in may give about an account it could not authenticate,
+# merged into one before they leave. "No such account" next to "wrong password"
+# is a way to list a domain's accounts from the sign-in page, one guess at a
+# time, without ever knowing a password. The real cause still reaches the audit
+# log, which records the error before this replaces it.
+_CREDENTIAL_CODES = frozenset(
+    {"invalid_credentials", "user_not_found", "kerberos_principal_unknown"}
+)
+
+
+def _outward(exc: SamfsconError) -> SamfsconError:
+    """The same refusal for an unknown account and a wrong password.
+
+    A new error rather than the old one with its code changed: translate()
+    puts the server's raw status in `detail`, and NT_STATUS_WRONG_PASSWORD
+    carries its own message ("Wrong password."), so either would still say
+    which of the two it was.
+    """
+    if exc.code not in _CREDENTIAL_CODES:
+        return exc
+    return AuthenticationError("Wrong user name or password.", code="invalid_credentials")
+
+
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
@@ -48,6 +71,11 @@ async def login(payload: LoginRequest, request: Request, response: Response) -> 
     audit = get_audit()
     address = client_ip(request)
 
+    # Before the worker and before the probe: a caller already over the limit
+    # costs nothing. The account half of the check follows once there is an
+    # account name, which needs the target resolved first.
+    throttle.check_address(address)
+
     session_id = store.new_id()
     registry = get_registry()
     worker = registry.get(session_id)
@@ -59,6 +87,11 @@ async def login(payload: LoginRequest, request: Request, response: Response) -> 
             kerberos.destroy_ticket(ccache)
         if principal_name:
             throttle.record_failure(principal_name, address)
+        else:
+            # Failed before there was an account to name — resolving the
+            # target. Counted against the address, or repeated probes of
+            # arbitrary hosts would never meet the throttle at all.
+            throttle.record_address_failure(address)
         audit.record(
             action="auth.login",
             actor=principal_name,
@@ -115,7 +148,7 @@ async def login(payload: LoginRequest, request: Request, response: Response) -> 
             )
         except SamfsconError as exc:
             _fail(exc, principal.username, target)
-            raise
+            raise _outward(exc) from None
         expires_hard_at = kerberos.ticket_expiry(ccache) or kerberos.default_expiry()
     else:
         # No KDC, so nothing to acquire and nothing that expires on its own.
@@ -162,7 +195,7 @@ async def login(payload: LoginRequest, request: Request, response: Response) -> 
             client_ip=address,
             extra={"server": target.display_name},
         )
-        raise
+        raise _outward(exc) from None
 
     throttle.record_success(principal.username, address)
     audit.record(

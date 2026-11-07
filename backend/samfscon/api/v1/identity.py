@@ -1,4 +1,12 @@
-"""Names and SIDs, for the permission editor's object picker."""
+"""Names and SIDs, for the permission editor's object picker.
+
+The two lookups are POST because a list of names or SIDs is a body, not a
+query string — and they take the CSRF-checked dependencies for that reason,
+even though they change nothing. The rule in this codebase is by method, not
+by effect: every state-changing verb carries the double-submit token. A route
+that is POST and exempt is a route somebody later copies as the template for
+one that writes.
+"""
 
 from __future__ import annotations
 
@@ -6,7 +14,7 @@ from typing import Any
 
 from fastapi import APIRouter
 
-from samfscon.auth.deps import CurrentSession, Worker
+from samfscon.auth.deps import CurrentSession, VerifiedSession, VerifiedWorker, Worker
 from samfscon.schemas.requests import LookupRequest
 from samfscon.srv import identity
 from samfscon.srv.access import srv_read
@@ -17,7 +25,7 @@ router = APIRouter(prefix="/identity", tags=["identity"])
 
 @router.post("/names")
 async def lookup_names(
-    payload: LookupRequest, session: CurrentSession, worker: Worker
+    payload: LookupRequest, session: VerifiedSession, worker: VerifiedWorker
 ) -> dict[str, Any]:
     """Resolve names to SIDs.
 
@@ -35,7 +43,7 @@ async def lookup_names(
 
 @router.post("/sids")
 async def lookup_sids(
-    payload: LookupRequest, session: CurrentSession, worker: Worker
+    payload: LookupRequest, session: VerifiedSession, worker: VerifiedWorker
 ) -> dict[str, Any]:
     """Resolve SIDs to names, for rendering an ACL.
 
